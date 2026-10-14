@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TikTok LIVE · Game Bridge</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <div class="brand"><span class="live-mark"></span> LIVE <span class="brand-soft">GAME BRIDGE</span></div>
+        <div id="connection" class="pill">Conectando à ponte...</div>
+      </header>
+      <section class="intro">
+        <div class="eyebrow">INTERATIVIDADE EM TEMPO REAL <span class="dot"></span> TIKTOK</div>
+        <h1>Cada interação<br />muda o <em>jogo.</em></h1>
+        <p>Comentários definem equipes, curtidas acumulam energia e presentes movimentam a arena.</p>
+      </section>
+      <section class="arena">
+        <div class="team blue"><small>EQUIPE</small><strong>AZUL</strong><div class="score" id="blue-score">0</div></div>
+        <div class="center"><span>VS</span><div class="energy-label">ENERGIA DA LIVE</div><div class="energy-track"><div id="energy-bar"></div></div><b id="energy">0</b></div>
+        <div class="team red"><small>EQUIPE</small><strong>VERMELHA</strong><div class="score" id="red-score">0</div></div>
+        <div id="flash" aria-hidden="true"></div>
+      </section>
+      <section class="lower">
+        <div class="panel"><h2>Painel de testes</h2><p id="mode-hint">Simule eventos para conferir a integração antes de abrir sua live.</p>
+          <div class="buttons">
+            <button data-demo="chat">Comentário</button><button data-demo="gift">Presente</button>
+            <button data-demo="like">25 curtidas</button><button data-demo="follow">Seguidor</button>
+            <button data-demo="share">Compartilhou</button><button data-demo="join">Entrou</button>
+          </div>
+          <div class="example"><span>COMANDOS DO CHAT</span> <code>!azul</code> <code>!vermelho</code></div>
+        </div>
+        <div class="panel feed"><div class="feed-title"><h2>Eventos recebidos</h2><span id="event-count">0 eventos</span></div><div id="events" class="events" aria-live="polite"><div class="empty">Aguardando interação...</div></div></div>
+      </section>
+      <footer>Projeto de exemplo · WebSocket local · OBS e jogos HTML/Phaser/Three.js</footer>
+    </main>
+    <script type="module" src="/game.js"></script>
+  </body>
+</html>

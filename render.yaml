@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: npc-chaos-live
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: HOST
+        value: 0.0.0.0
+      - key: TIKTOK_USERNAME
+        value: ghostbr010
