@@ -2,6 +2,25 @@ import { WIDTH, HEIGHT } from './engine.js';
 
 const TAU = Math.PI * 2;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const images = Object.fromEntries(['eclipse-arena','kaito','slime','hunter','tank','boss'].map(name => {
+  const img = new Image();
+  img.src = new URL(`./assets/${name}.webp`, import.meta.url).href;
+  return [name, img];
+}));
+const ready = img => img?.complete && img.naturalWidth > 0;
+
+function sprite(ctx, img, x, footY, height, facing = 1, tilt = 0) {
+  if (!ready(img)) return false;
+  const width = height * img.naturalWidth / img.naturalHeight;
+  ctx.save();
+  ctx.translate(x, footY);
+  ctx.scale(facing, 1);
+  ctx.rotate(tilt);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, -width / 2, -height, width, height);
+  ctx.restore();
+  return true;
+}
 
 function poly(ctx, pts, fill, stroke = null, line = 1) {
   ctx.beginPath();
@@ -33,6 +52,39 @@ function aura(ctx,x,y,r,hex,opacity=.16) {
 }
 
 function background(ctx, t, arena) {
+  if (ready(images['eclipse-arena'])) {
+    ctx.drawImage(images['eclipse-arena'], 0, 0, WIDTH, HEIGHT);
+    // A quiet moving light pass adds depth without concealing the art or the fighters.
+    let shade = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    shade.addColorStop(0, '#02071755');
+    shade.addColorStop(.42, '#020d1c18');
+    shade.addColorStop(1, '#02081760');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.save();
+    ctx.translate(360, 820);
+    ctx.scale(1, .37);
+    ctx.rotate(t * .025);
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(0, 0, 175 + i * 65, 0, TAU);
+      ctx.strokeStyle = i === 1 ? '#73ffe04a' : '#8deaff22';
+      ctx.lineWidth = i === 1 ? 5 : 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+    for (let i = 0; i < 23; i++) {
+      const x = (i * 113.7 + Math.sin(t * .2 + i) * 20) % WIDTH;
+      const y = (i * 211.2 - t * (7 + i % 4)) % HEIGHT;
+      ring(ctx, x, y < 0 ? y + HEIGHT : y, i % 5 === 0 ? 2.2 : 1.1,
+        `rgba(153,255,244,${.16 + .17 * Math.sin(t * 1.4 + i)})`);
+    }
+    if (arena.phase === 'dead') {
+      ctx.fillStyle = '#7c10232c';
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    }
+    return;
+  }
   let g=ctx.createLinearGradient(0,0,0,HEIGHT);
   g.addColorStop(0,'#090f2a');g.addColorStop(.38,'#19263d');g.addColorStop(.65,'#092c3a');g.addColorStop(1,'#061622');
   ctx.fillStyle=g;ctx.fillRect(0,0,WIDTH,HEIGHT);
@@ -113,6 +165,17 @@ function enemy(ctx,e,t){
   ellipse(ctx,0,e.r+12,s*25,9,'#000d20a8');
   ctx.translate(0,bounce);
   aura(ctx,0,0,isBoss?118:58,isBoss?'#ff703e':isTank?'#b179fd':e.type==='hunter'?'#f34b79':'#41f5db',isBoss?.34:.16);
+  const size = isBoss ? 188 : isTank ? 112 : e.type === 'hunter' ? 91 : 76;
+  if (sprite(ctx, images[e.type], 0, e.r + 15, size, 1, Math.sin(t * 2 + e.id) * .025)) {
+    ctx.restore();
+    const ratio=clamp(e.hp/e.maxHp,0,1);
+    if(ratio<.999 || isBoss){
+      const w=isBoss?130:52;
+      ctx.fillStyle='#020b18d9';ctx.fillRect(e.x-w/2,e.y-(isBoss?160:isTank?89:65),w,7);
+      ctx.fillStyle=isBoss?'#ff9459':'#eb80be';ctx.fillRect(e.x-w/2,e.y-(isBoss?160:isTank?89:65),w*ratio,7);
+    }
+    return;
+  }
   ctx.scale(s,s);
   const hue={slime:'#45d5cb',hunter:'#ff537b',tank:'#ad86e8',boss:'#ff8858'}[e.type];
   if(isBoss){
@@ -165,6 +228,30 @@ function hero(ctx,h,t){
     ctx.strokeStyle='#bdb4ff9f';ctx.lineWidth=4;ctx.stroke();
     ctx.beginPath();ctx.ellipse(x,y-10,49,69,0,0,TAU);
     ctx.strokeStyle='#7fe7ff3a';ctx.lineWidth=1;ctx.stroke();
+  }
+  if (ready(images.kaito)) {
+    if (h.dashClock > 3.45) {
+      ctx.save();ctx.globalAlpha=.25;
+      sprite(ctx, images.kaito, x-facing*54, y+43, 173, facing, -.05);
+      ctx.restore();
+    }
+    ctx.save();
+    if (h.hitClock > .38) ctx.filter = 'brightness(1.8) saturate(.5)';
+    sprite(ctx, images.kaito, x, y+43+Math.sin(t*9)*2, 173, facing,
+      Math.sin(t*4)*.012 + (h.dashClock > 3.45 ? -.09 : 0));
+    ctx.restore();
+    if (h.attackClock > h.rate - .13) {
+      ctx.save();
+      ctx.translate(x+facing*24,y-40);
+      ctx.scale(facing,1);
+      ctx.rotate(-.33);
+      ctx.shadowColor='#8dfff4';ctx.shadowBlur=22;
+      ctx.beginPath();ctx.ellipse(0,0,78,51,0,-1.2,1.1);
+      ctx.strokeStyle='#d9fffbba';ctx.lineWidth=7;ctx.stroke();
+      ctx.restore();
+    }
+    if(h.hitClock>.25) ring(ctx,x,y-19,62,'#ff6c8422','#ff9bab',3);
+    return;
   }
   ctx.save();
   ctx.translate(x,y+step);
@@ -243,11 +330,23 @@ function particles(ctx,arena) {
         line(ctx,x-43,y-130,x,y,'#ffbd8b',10*p);
       }
     } else if(f.kind==='god'){
-      for(let i=0;i<8;i++){
-        const x=80+i*85;
-        line(ctx,x,365,x+Math.sin(i*5)*18,1100,'#fff4ad',5*p);
+      aura(ctx,f.x,f.y,270,'#ffe7a2',.32*p);
+      ctx.save();
+      ctx.translate(f.x,f.y);
+      ctx.rotate((1-p)*.6);
+      for(let i=0;i<12;i++){
+        const angle=i*TAU/12, inner=75+(i%3)*12, outer=135+(i%4)*16;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle)*inner,Math.sin(angle)*inner);
+        ctx.lineTo(Math.cos(angle-.018)*outer,Math.sin(angle-.018)*outer);
+        ctx.lineTo(Math.cos(angle+.018)*outer,Math.sin(angle+.018)*outer);
+        ctx.closePath();
+        ctx.fillStyle=`rgba(255,236,168,${.3*p})`;
+        ctx.fill();
       }
-      aura(ctx,f.x,f.y,350,'#ffed9b',.35*p);
+      ctx.beginPath();ctx.ellipse(0,20,165+(1-p)*35,75+(1-p)*15,0,0,TAU);
+      ctx.strokeStyle=`rgba(255,236,169,${.75*p})`;ctx.lineWidth=7*p;ctx.stroke();
+      ctx.restore();
     } else if(f.kind==='freeze') {
       aura(ctx,f.x,f.y,285,'#7addff',.16*p);
       for(let i=0;i<12;i++){

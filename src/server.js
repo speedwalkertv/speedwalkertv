@@ -13,7 +13,7 @@ if (username && !/^[\w.]{2,40}$/.test(username)) throw new Error('TIKTOK_USERNAM
 const mode = username ? 'live' : 'demo';
 const host = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
 const port = Number(process.env.PORT ?? 8787);
-const mimeTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const mimeTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webp': 'image/webp' };
 const publicDir = path.join(root, 'public');
 
 let status = { state: mode === 'demo' ? 'demo' : 'connecting', mode, username, roomId: null, message: '' };
@@ -39,7 +39,9 @@ const server = http.createServer(async (req, res) => {
     '/npc': 'npc/index.html', '/npc/': 'npc/index.html',
     '/npc/index.html': 'npc/index.html', '/npc/main.js': 'npc/main.js',
     '/npc/engine.js': 'npc/engine.js', '/npc/draw.js': 'npc/draw.js',
-    '/npc/style.css': 'npc/style.css'
+    '/npc/style.css': 'npc/style.css',
+    ...Object.fromEntries(['eclipse-arena','kaito','slime','hunter','tank','boss'].map(name =>
+      [`/npc/assets/${name}.webp`, `npc/assets/${name}.webp`]))
   };
   const file = paths[url.pathname];
   if (!file) { res.writeHead(404).end('Not found'); return; }

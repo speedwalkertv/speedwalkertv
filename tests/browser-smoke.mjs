@@ -31,6 +31,13 @@ try {
   page.on('pageerror',error=>pageErrors.push(String(error)));
   await page.goto('http://127.0.0.1:'+port+'/npc/',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(() => window.NPC_CHAOS?.getStatus().mode === 'demo',{timeout:15000});
+  await page.waitForFunction(() => {
+    const portrait = document.querySelector('.hero-avatar img');
+    return portrait?.complete && portrait.naturalWidth > 0;
+  }, undefined, {timeout:15000});
+  const scenery = await page.request.get('http://127.0.0.1:'+port+'/npc/assets/eclipse-arena.webp');
+  assert.equal(scenery.status(),200);
+  assert.match(scenery.headers()['content-type'],/image\/webp/);
   await page.waitForTimeout(2500);
   assert.equal(await page.title(),'NPC CHAOS LIVE — O Herói do Chat');
   assert.equal(await page.locator('#hero-level').innerText(),'LVL 1');
