@@ -27,8 +27,10 @@ export class Arena {
     this.hero = { x: 360, y: 814, hp: 160, maxHp: 160, shield: 0, level: 1, xp: 0, xpNext: 7, damage: 23, speed: 130, rate: .50, attackClock: .3, hitClock: 0, dashClock: 0, facing: 1 };
     Object.assign(this.hero, { vx: 0, vy: 0, stride: 0, attackPose: 0, attackSerial: 0, aim: 0, trail: [], trailClock: 0 });
     this.visuals = [];
-    this.combatStats = { shots:0, hits:0 };
+    this.combatStats = { shots:0, hits:0, hitsTaken:0, projectileHits:0, contactHits:0, damageTaken:0 };
     this.agentDecision = null;
+    this.lastMovement = 'approach';
+    this.lastMovementSource = 'baseline';
     this.enemies = [];
     this.bullets = [];
     this.particles = [];
@@ -351,6 +353,8 @@ export class Arena {
         const directions={approach:[dx,dy],retreat:[-dx,-dy],orbit_left:[dy,-dx],orbit_right:[-dy,dx],hold:[0,0],north:[0,-1],south:[0,1],east:[1,0],west:[-1,0]};
         [vx,vy]=directions[agent.movement]||[vx,vy];
       }
+      this.lastMovement=agent?.movement||(d<140?'evade_orbit':'approach');
+      this.lastMovementSource=agent?.source==='typesafe-api'?'typesafe-api':agent?.source==='learned-local'?'learned-local':'baseline';
       const close = this.enemies.filter(e => distance(e, h) < 95).length;
       if ((agent?agent.dash:close >= 3) && h.dashClock === 0) {
         h.dashClock = 3.8;
@@ -401,6 +405,9 @@ export class Arena {
         let damage = e.damage;
         if (h.shield > 0) { const absorb = Math.min(h.shield, damage); h.shield -= absorb; damage -= absorb; }
         h.hp -= damage;
+        this.combatStats.hitsTaken++;
+        this.combatStats.contactHits++;
+        this.combatStats.damageTaken+=damage;
         h.hitClock = .62;
         this.shake = Math.max(this.shake, 5);
         this.float('-' + Math.round(damage), h.x, h.y - 65, '#ff7294');
@@ -432,6 +439,9 @@ export class Arena {
       } else if (distance(h, b) < 19 + b.r && h.hitClock === 0) {
         const absorb = Math.min(h.shield, b.damage);
         h.shield -= absorb; h.hp -= b.damage - absorb;
+        this.combatStats.hitsTaken++;
+        this.combatStats.projectileHits++;
+        this.combatStats.damageTaken+=b.damage-absorb;
         h.hitClock = .35; b.ttl = 0;
         this.sparks(h.x, h.y, '#ff8a62', 8);
       }
@@ -461,6 +471,7 @@ export class Arena {
       this.say('Fui de base... mas eu VOLTO!', 4.7);
       this.sparks(h.x, h.y, '#ff77ad', 70, 2);
       this.push('system', 'Nova tentativa em 5s', 'O NPC se levanta sozinho.');
+      this.onGameOver?.();
     }
   }
 }

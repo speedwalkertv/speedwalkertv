@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import { createBrain } from './jev-brain.js';
 
 export const MOVES = ['approach','retreat','orbit_left','orbit_right','hold','north','south','east','west'];
 const number=(n,min,max)=>typeof n==='number'&&Number.isFinite(n)?Math.max(min,Math.min(max,n)):0;
@@ -13,8 +14,9 @@ export function observation(raw){
     projectiles:(Array.isArray(raw.projectiles)?raw.projectiles:[]).slice(0,12).map(b=>({...point(b),vx:number(b.vx,-1000,1000),vy:number(b.vy,-1000,1000)}))
   };
 }
-export function requestFor(state,model){
-  return {model,state,questions:{
+export function requestFor(state,model,policy,notes=''){
+  return {model,state,...(policy?.matches ? {memory:{matches:policy.matches,bestWave:policy.bestWave,
+    survivalRules:policy.contexts,notes:notes.slice(0,4000)}} : notes ? {memory:{notes:notes.slice(0,4000)}} : {}),questions:{
     target:{type:'choice',instructions:'Choose the enemy to shoot now. Prioritize imminent threats and easy eliminations; keep a safe distance. IDs refer to enemies in state.',criteria:Object.fromEntries([['nearest','Nearest living threat, if there is one'],['none','No living enemy currently available'],...state.enemies.map(e=>[e.id,`${e.type} at (${e.x},${e.y}), HP ${e.hp}`])])},
     movement:{type:'choice',instructions:'Choose one movement for the next two seconds. Survive, avoid incoming projectiles and enemy contact, remain inside arena bounds. Approach only when enemies are too far; retreat when surrounded or low on health. Orbit choices move around the selected target.',criteria:{approach:'Move toward the target',retreat:'Move away from the target',orbit_left:'Circle counterclockwise around the target',orbit_right:'Circle clockwise around the target',hold:'Stay in place',north:'Move up',south:'Move down',east:'Move right',west:'Move left'}},
     fire:{type:'noul',instructions:'Firing at the selected enemy now is useful. Shots cost no ammunition.'},
@@ -29,23 +31,77 @@ export function decisionFrom(response,state){
     confidence:number(a.movement.confidence,0,1),model:typeof response.model==='string'?response.model.slice(0,60):'jev'};
 }
 
-export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now}={}){
+export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now,brain=createBrain({env})}={}){
   const key=env.TYPESAFE_API_KEY?.trim(),token=env.JEV_CONTROL_TOKEN?.trim();
   const configuration=!key?'missing_api_key':!token?'missing_control_token':token.length<24?'control_token_too_short':'ok';
-  const ready=configuration==='ok',model=env.JEV_MODEL||'jev-latest';
+  const ready=configuration==='ok',memoryReady=Boolean(token&&token.length>=24),model=env.JEV_MODEL||'jev-latest';
   let busy=false,nextAt=0,hourAt=now(),calls=0;
   const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
+  const readJson=async(req,maxBytes)=>{
+    let body='',bytes=0;
+    const timer=setTimeout(()=>req.destroy(),8000);
+    try {
+      for await(const chunk of req){bytes+=chunk.length;if(bytes>maxBytes)throw Error('body_too_large');body+=chunk.toString();}
+    } finally {clearTimeout(timer);}
+    return JSON.parse(body);
+  };
   return async(req,res,url)=>{
     if(!url.pathname.startsWith('/api/jev/'))return false;
-    if(url.pathname==='/api/jev/status'&&req.method==='GET'){send(res,200,{ready,configuration,provider:'TypeSafe',model,intervalMs:2000});return true;}
-    if(url.pathname!=='/api/jev/decision'||req.method!=='POST'){send(res,404,{error:'not_found'});return true;}
-    if(!ready){send(res,503,{error:'not_configured',configuration});return true;}
+    if(url.pathname==='/api/jev/status'&&req.method==='GET'){
+      const policy=await brain.getPolicy().catch(()=>({matches:0}));
+      send(res,200,{ready,memoryReady,configuration,provider:'TypeSafe',model,intervalMs:2000,matchesLearned:policy.matches});return true;
+    }
+    if(url.pathname==='/api/jev/policy'&&req.method==='GET'){
+      try{send(res,200,await brain.getPolicy());}catch{send(res,503,{error:'brain_unavailable'});}return true;
+    }
+    const isMemory=url.pathname.startsWith('/api/jev/memory/');
+    if(!isMemory&&(url.pathname!=='/api/jev/decision'||req.method!=='POST')){send(res,404,{error:'not_found'});return true;}
+    if(isMemory&&!memoryReady){send(res,503,{error:'missing_control_token'});return true;}
+    if(!isMemory&&!ready){send(res,503,{error:'not_configured',configuration});return true;}
     const provided=String(req.headers.authorization||'').replace(/^Bearer /,'');
     const a=Buffer.from(provided),b=Buffer.from(token);
     if(a.length!==b.length||!timingSafeEqual(a,b)){send(res,401,{error:'unauthorized'});return true;}
     if(req.headers.origin){
       try{if(new URL(req.headers.origin).host!==req.headers.host)throw Error();}
       catch{send(res,403,{error:'origin_denied'});return true;}
+    }
+    if(isMemory){
+      if(url.pathname==='/api/jev/memory/export'&&req.method==='GET'){
+        try{send(res,200,{version:1,matches:await brain.getRecent(2000),policy:await brain.getPolicy(),notes:await brain.getNotes()});}
+        catch{send(res,503,{error:'brain_unavailable'});}
+        return true;
+      }
+      if(url.pathname==='/api/jev/memory/dashboard'&&req.method==='GET'){
+        try{send(res,200,await brain.getDashboard());}catch{send(res,503,{error:'brain_unavailable'});}
+        return true;
+      }
+      if(url.pathname==='/api/jev/memory/notes'&&req.method==='PUT'){
+        try{
+          const input=await readJson(req,18000);
+          await brain.editNotes(input?.notes);
+          send(res,200,{saved:true});
+        }catch(error){send(res,['invalid_notes','body_too_large'].includes(error.message)||error instanceof SyntaxError?400:503,
+          {error:error.message==='invalid_notes'?'invalid_notes':'brain_write_failed'});}
+        return true;
+      }
+      if(url.pathname==='/api/jev/memory/import'&&req.method==='POST'){
+        try{
+          const input=await readJson(req,6000000);
+          const result=await brain.importMemory(input);
+          send(res,200,{saved:true,added:result.added,matchesLearned:result.policy.matches});
+        }catch(error){send(res,['invalid_import','body_too_large'].includes(error.message)||error instanceof SyntaxError?400:503,
+          {error:error.message==='invalid_import'?'invalid_import':'brain_import_failed'});}
+        return true;
+      }
+      if(url.pathname!=='/api/jev/memory/match'||req.method!=='POST'){send(res,405,{error:'method_not_allowed'});return true;}
+      try{
+        const result=await brain.save(await readJson(req,600000));
+        send(res,200,{saved:true,duplicate:result.duplicate,id:result.id,matchesLearned:result.policy.matches});
+      }catch(error){
+        send(res,['invalid_match','body_too_large'].includes(error.message)||error instanceof SyntaxError?400:503,
+          {error:['invalid_match','body_too_large'].includes(error.message)||error instanceof SyntaxError?'invalid_match':'brain_write_failed'});
+      }
+      return true;
     }
     if(now()-hourAt>=3600000){hourAt=now();calls=0;}
     if(busy||now()<nextAt||calls>=1800){send(res,429,{error:'rate_limit'});return true;}
@@ -61,7 +117,7 @@ export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now}=
       const started=now();
       const response=await fetchImpl('https://api.typesafe.ai/v1/systemone',{
         method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-        body:JSON.stringify(requestFor(state,model)),signal:AbortSignal.timeout(9000)
+        body:JSON.stringify(requestFor(state,model,await brain.getPolicy().catch(()=>null),await brain.getNotes().catch(()=>''))),signal:AbortSignal.timeout(9000)
       });
       if(!response.ok){
         nextAt=now()+10000;

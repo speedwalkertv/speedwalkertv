@@ -28,16 +28,16 @@ export class JevPilot {
       this.config=await response.json();
       this.onStatus({state:this.config.ready?'ready':'unconfigured',text:this.config.ready?'Jev pronta. Informe o código JEV_CONTROL_TOKEN para conectar.':configMessage[this.config.configuration]||'Conexão da Jev ainda não configurada no servidor.'});
       const token=sessionStorage.getItem('jev-control');
-      if(this.config.ready&&token)this.start(token);
+      if(this.config.memoryReady&&token)this.start(token);
     }catch{this.onStatus({state:'error',text:'Não foi possível consultar a conexão da Jev.'});}
     if(!this.enabled&&!this.config?.ready)this.refreshTimer=setTimeout(()=>this.init(),10000);
   }
   start(token){
-    if(!this.config?.ready){this.onStatus({state:'unconfigured',text:'Aguarde a configuração ser aplicada no Render.'});return;}
+    if(!this.config?.memoryReady){this.onStatus({state:'unconfigured',text:'Configure JEV_CONTROL_TOKEN no servidor para salvar partidas.'});return;}
     if(!token||token.length<24){this.onStatus({state:'error',text:'Informe o código JEV_CONTROL_TOKEN completo (mínimo 24 caracteres).'});return;}
     this.stop(false);this.token=token;this.enabled=true;
     sessionStorage.setItem('jev-control',token);
-    this.onStatus({state:'thinking',text:'Conectando à Jev pela TypeSafe...'});
+    this.onStatus({state:'thinking',text:this.config.ready?'Conectando à Jev pela TypeSafe...':'Memoria ativa. Piloto local em funcionamento.'});
     this.loop(this.generation);
   }
   stop(clear=true){
@@ -47,9 +47,9 @@ export class JevPilot {
   }
   async loop(generation){
     if(!this.enabled||generation!==this.generation)return;
-    if(document.hidden||this.game.phase!=='combat'){
-      this.game.agentDecision=null;
-      this.onStatus({state:'waiting',text:document.hidden?'Jev em espera: aba em segundo plano.':'Jev aguardando a próxima rodada.'});
+    if(!this.config?.ready||document.hidden||this.game.phase!=='combat'){
+      if(this.game.agentDecision?.source==='typesafe-api')this.game.agentDecision=null;
+      this.onStatus({state:'waiting',text:!this.config?.ready?'Memoria ativa; IA externa indisponivel.':'Jev aguardando combate ativo.'});
       this.timer=setTimeout(()=>this.loop(generation),2000);return;
     }
     const run=this.game.runs,g=this.game,h=g.hero;
@@ -72,7 +72,7 @@ export class JevPilot {
       }
     }catch(error){
       if(generation!==this.generation)return;
-      g.agentDecision=null;delay=5000;
+      if(g.agentDecision?.source==='typesafe-api')g.agentDecision=null;delay=5000;
       const description=error.name==='AbortError'?'O pedido à Jev excedeu o tempo limite.':errorMessage[error.message]||'Jev indisponível. Verifique conexão e configuração.';
       this.onStatus({state:'error',text:description+' Piloto local mantém o combate; tentando novamente.'});
     }finally{clearTimeout(timeout);}

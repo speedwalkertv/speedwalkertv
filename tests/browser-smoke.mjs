@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const screenshotDir = path.join(root, '..', '..', 'validation');
+const token='private-test-token-at-least-24';
+const isolatedBrain=await mkdtemp(path.join(os.tmpdir(),'jev-browser-smoke-'));
 const server = spawn(process.execPath, ['src/server.js'], {
-  cwd: root, env: { ...process.env, TIKTOK_USERNAME:'', PORT:'0', HOST:'127.0.0.1' },
+  cwd: root, env: { ...process.env, TIKTOK_USERNAME:'', TYPESAFE_API_KEY:'',
+    JEV_CONTROL_TOKEN:token, JEV_BRAIN_PATH:isolatedBrain, PORT:'0', HOST:'127.0.0.1' },
   stdio:['ignore','pipe','pipe']
 });
 let browser;
@@ -55,7 +59,7 @@ try {
   const jevPage=await browser.newPage({viewport:{width:1650,height:1050}});
   jevPage.on('pageerror',e=>pageErrors.push('jev: '+String(e)));
   let decisions=0;
-  await jevPage.route('**/api/jev/status',route=>route.fulfill({json:{ready:true,configuration:'ok',provider:'TypeSafe',model:'jev-latest',intervalMs:2000}}));
+  await jevPage.route('**/api/jev/status',route=>route.fulfill({json:{ready:true,memoryReady:true,configuration:'ok',provider:'TypeSafe',model:'jev-latest',intervalMs:2000}}));
   await jevPage.route('**/api/jev/decision',route=>{
     decisions++;
     const request=route.request();
@@ -71,6 +75,30 @@ try {
   assert.equal(await jevPage.locator('#jev-mode').innerText(),'API ATIVA');
   assert.ok(decisions>0,'Jev should issue decisions');
   await jevPage.close();
+  const memoryPage=await browser.newPage({viewport:{width:1480,height:1000}});
+  memoryPage.on('pageerror',error=>pageErrors.push('memory: '+String(error)));
+  await memoryPage.goto('http://127.0.0.1:'+port+'/npc/memory/');
+  assert.equal(await memoryPage.title(),'Cérebro da Jev · NPC CHAOS');
+  await memoryPage.locator('#access-token').fill(token);
+  await memoryPage.locator('#connect').click();
+  await memoryPage.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Memória conectada');
+  assert.equal(await memoryPage.locator('#metric-matches').innerText(),'0');
+  await memoryPage.locator('#notes').fill('Esquivar antes de atacar.');
+  await memoryPage.locator('#save-notes').click();
+  await memoryPage.waitForFunction(()=>document.querySelector('#notice')?.textContent.includes('salvas'));
+  const match={id:'smoke-match-0001',duration:2,wave:1,kills:0,score:5,damageTaken:2,hitsTaken:1,
+    shots:2,shotsHit:1,projectileHits:1,frames:[
+      {t:0,movement:'retreat',hpRatio:1,nearestDistance:50,closeEnemies:1,projectiles:0,hitsTaken:0,damageTaken:0,kills:0,wave:1},
+      {t:1,movement:'retreat',hpRatio:.9,nearestDistance:80,closeEnemies:1,projectiles:1,hitsTaken:1,damageTaken:2,kills:0,wave:1}
+    ]};
+  const posted=await memoryPage.request.post('http://127.0.0.1:'+port+'/api/jev/memory/match',{
+    headers:{Authorization:'Bearer '+token},data:match
+  });
+  assert.equal(posted.status(),200);
+  await memoryPage.locator('#refresh').click();
+  await memoryPage.waitForFunction(()=>document.querySelector('#metric-matches')?.textContent==='1');
+  assert.match(await memoryPage.locator('#match-list').innerText(),/5 pontos/);
+  await memoryPage.close();
   await mkdir(screenshotDir,{recursive:true});
   const deskPath=path.join(screenshotDir,'npc-chaos-desktop.png');
   await page.screenshot({path:deskPath,fullPage:true});
@@ -89,4 +117,5 @@ try {
 } finally {
   await browser?.close();
   server.kill();
+  await rm(isolatedBrain,{recursive:true,force:true,maxRetries:4,retryDelay:300});
 }
