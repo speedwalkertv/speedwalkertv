@@ -10,6 +10,8 @@ No OBS ou TikTok LIVE Studio, adicione a fonte de navegador **http://127.0.0.1:8
 
 ### Hospedagem na nuvem
 
+Para hospedar o projeto fora do Render, use o `Dockerfile` e as instrucoes de `MIGRACAO_KOYEB.md`. O jogo, a conexao TikTok LIVE, o WebSocket e a API Jev permanecem no mesmo servico Node.js.
+
 O arquivo `render.yaml` define um servico web Node.js no plano gratuito do Render, com endpoint de saude em `/health`. Ao conectar este repositorio no painel Render como **Blueprint** (ou criar um Web Service com `npm ci --omit=dev` e `npm start`), o jogo e o conector ficam no mesmo dominio: `https://<nome>.onrender.com/npc/`. O modo overlay e `https://<nome>.onrender.com/npc/?overlay=1`.
 
 O nome TikTok `ghostbr010` ja esta configurado no Blueprint. A biblioteca tenta conectar automaticamente e repete quando a LIVE esta offline. O jogo pode ser aberto e jogado no navegador quando o PC do criador esta desligado, desde que o servico esteja ativo. O navegador que exibe a arena deve permanecer aberto para a animacao continuar e para encaminhar eventos ao jogo; para colocar a arena no video da LIVE, uma fonte de captura/stream tambem precisa estar ativa. A hospedagem do site, por si so, nao inicia uma transmissao TikTok.
