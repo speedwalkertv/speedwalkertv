@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { TikTokLiveConnection, WebcastEvent, ControlEvent } from 'tiktok-live-connector';
 import { normalizeEvent } from './normalize.js';
+import { createJevHandler } from './jev.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const username = (process.env.TIKTOK_USERNAME ?? '').trim().replace(/^@/, '');
@@ -21,8 +22,10 @@ let liveConnection = null;
 let stopped = false;
 let retryTimer = null;
 let retries = 0;
+const handleJev=createJevHandler();
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if(await handleJev(req,res,url))return;
   if (req.method !== 'GET') { res.writeHead(405).end(); return; }
   if (url.pathname === '/') {
     res.writeHead(302, { Location: '/npc/' }).end();
@@ -39,8 +42,12 @@ const server = http.createServer(async (req, res) => {
     '/npc': 'npc/index.html', '/npc/': 'npc/index.html',
     '/npc/index.html': 'npc/index.html', '/npc/main.js': 'npc/main.js',
     '/npc/engine.js': 'npc/engine.js', '/npc/draw.js': 'npc/draw.js',
+    '/npc/vfx.js':'npc/vfx.js', '/npc/combat-ai.js':'npc/combat-ai.js',
+    '/npc/jev-client.js':'npc/jev-client.js',
     '/npc/style.css': 'npc/style.css',
-    ...Object.fromEntries(['eclipse-arena','kaito','slime','hunter','tank','boss'].map(name =>
+    ...Object.fromEntries(['eclipse-arena','kaito','kaito-attack','kaito-windup','kaito-swing','slime','hunter','tank','boss',
+      ...Array.from({length:6},(_,i)=>`kaito-run-${i}`),
+      ...['hunter','tank','boss'].flatMap(type=>Array.from({length:3},(_,i)=>`${type}-motion-${i}`))].map(name =>
       [`/npc/assets/${name}.webp`, `npc/assets/${name}.webp`]))
   };
   const file = paths[url.pathname];

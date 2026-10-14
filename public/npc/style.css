@@ -158,3 +158,5 @@ body{background:radial-gradient(ellipse at 48% -10%,#203250 0%,transparent 48%),
 .activity-list{scrollbar-color:#4b8995 transparent}
 .demo-grid button:hover{box-shadow:0 0 18px #54e6d323}
 @media(max-width:480px){.speech{bottom:17%;padding:6px 10px;max-width:78%}}
+
+.jev-panel p{line-height:1.6;color:#dce4ff}.jev-panel small{display:block;color:#9ba9c4;line-height:1.5;margin:10px 0}.jev-panel form{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0}.jev-panel label{font-size:12px}.jev-panel input{width:100%;padding:12px;background:#090e20;color:white;border:1px solid #3d4665;border-radius:8px}.jev-panel .section-label{flex-wrap:wrap;gap:8px}#jev-mode{font-size:10px;color:#a69aff}.control-actions{flex-wrap:wrap}

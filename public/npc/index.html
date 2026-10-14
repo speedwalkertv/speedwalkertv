@@ -75,10 +75,14 @@
     </div>
     <div class="control-bar">
       <div class="control-left"><span class="pulse-point"></span><div><strong id="control-mode">Modo demonstração</strong><small id="control-description">O NPC joga automaticamente mesmo sem live.</small></div></div>
-      <div class="control-actions"><button class="button ghost" id="sound-toggle" type="button" title="Ativar falas do personagem">♫ Voz: desligada</button><button class="button accent" id="fullscreen" type="button">⛶ Tela cheia</button></div>
+      <div class="control-actions"><button class="button ghost" id="effects-toggle" type="button" aria-pressed="false" title="Reduzir tremor e intensidade dos efeitos">Efeitos: completos</button><button class="button ghost" id="sound-toggle" type="button" title="Ativar falas do personagem">♫ Voz: desligada</button><button class="button accent" id="fullscreen" type="button">⛶ Tela cheia</button></div>
     </div>
   </section>
   <aside class="side right">
+    <section class="glass block jev-panel"><div class="section-label">JEV · TYPESAFE <span id="jev-mode">PILOTO LOCAL</span></div>
+    <p id="jev-status" role="status">Consultando conexão...</p><small id="jev-detail"></small>
+    <form id="jev-form"><label for="jev-token">Código privado de controle</label><input id="jev-token" type="password" autocomplete="off" minlength="24" placeholder="Código de controle, não a chave API"><button class="button accent" id="jev-connect" type="submit" disabled>Conectar Jev</button><button class="button ghost" id="jev-stop" type="button">Desconectar</button></form>
+    <small>A chave TypeSafe fica somente no servidor. A Jev decide; o motor executa o combate.</small></section>
     <div class="glass block event-panel"><div class="section-label"><span class="small-red"></span> ATIVIDADE EM TEMPO REAL <span class="counter" id="event-total">0</span></div><div id="activity-list" class="activity-list"><div class="empty">Aguardando interações da live...</div></div></div>
     <div class="glass block demo-panel" id="demo-panel">
       <div class="section-label">LABORATÓRIO <span class="tiny-pill demo-pill">MODO TESTE</span></div>

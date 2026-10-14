@@ -1,4 +1,5 @@
 // Simulacao independente do navegador: combate, NPC automatico e efeitos das LIVE.
+import { intercept, selectTarget, segmentCircleHit } from './combat-ai.js';
 export const WIDTH = 720;
 export const HEIGHT = 1280;
 const LIMITS = { left: 67, right: 653, top: 405, bottom: 1150 };
@@ -24,6 +25,10 @@ export class Arena {
     this.lastKillAt = 0;
     this.likeCharge = 0;
     this.hero = { x: 360, y: 814, hp: 160, maxHp: 160, shield: 0, level: 1, xp: 0, xpNext: 7, damage: 23, speed: 130, rate: .50, attackClock: .3, hitClock: 0, dashClock: 0, facing: 1 };
+    Object.assign(this.hero, { vx: 0, vy: 0, stride: 0, attackPose: 0, attackSerial: 0, aim: 0, trail: [], trailClock: 0 });
+    this.visuals = [];
+    this.combatStats = { shots:0, hits:0 };
+    this.agentDecision = null;
     this.enemies = [];
     this.bullets = [];
     this.particles = [];
@@ -72,6 +77,11 @@ export class Arena {
     }
   }
 
+  visual(kind, x, y, duration = 1, options = {}) {
+    this.visuals.push({ kind, x, y, ttl: duration, max: duration, ...options });
+    if (this.visuals.length > 64) this.visuals.splice(0, this.visuals.length - 64);
+  }
+
   float(text, x, y, color = '#fff', size = 23) {
     this.floaters.push({ text, x, y, ttl: 1, color, size });
     this.floaters.length = Math.min(32, this.floaters.length);
@@ -87,7 +97,9 @@ export class Arena {
     const hp = boss ? 520 + this.wave * 75 : (type === 'tank' ? 105 : type === 'hunter' ? 55 : 42) + this.wave * 12;
     this.enemies.push({ id: ++this.entityId, type, x, y, hp, maxHp: hp, r: boss ? 59 : type === 'tank' ? 27 : 18,
       speed: boss ? 37 : type === 'tank' ? 37 : type === 'hunter' ? 98 : 60,
-      damage: boss ? 23 : type === 'tank' ? 18 : 10, attackClock: random(.2, 2.5), a: 0 });
+      damage: boss ? 23 : type === 'tank' ? 18 : 10, attackClock: random(.2, 2.5), a: 0,
+      born: .55, hitFlash: 0, stride: 0, moving: false, aim: 0, vx:0, vy:0 });
+    this.visual('spawn', x, y, boss ? 1.2 : .65, { color: colors[type], radius: boss ? 120 : 42 });
     if (boss) this.announce('CHEFE INFERNAL', 'PRECISAMOS DE REFORÇOS!', '#ff875d', 4);
   }
 
@@ -123,6 +135,7 @@ export class Arena {
     h.hp = clamp(h.hp + amount, 0, h.maxHp);
     this.float('+' + Math.round(amount) + ' VIDA', h.x, h.y - 60, '#5cffe2');
     this.sparks(h.x, h.y, '#5cffe2', 22);
+    this.visual('heal', h.x, h.y, 1.5, { follow: true });
   }
 
   gift(event, name) {
@@ -138,12 +151,14 @@ export class Arena {
       h.shield += 120;
       this.pulse(h.x, h.y, '#ffe49b', 1000, 480);
       this.flares.push({ x: h.x, y: h.y, ttl: 1.9, kind: 'god' });
+      this.visual('ultimate', h.x, h.y, 2.1);
       this.push('gift', name, 'Invocou PODER DIVINO', Math.max(1, total));
     } else if (total >= 80) {
       this.announce('CHUVA DE METEOROS', name.toUpperCase() + ' ATACOU!', '#ff786d', 3.6);
       this.say('QUE ISSO, ' + name + '! Meteoro neles!', 4.5);
       this.pulse(h.x, h.y, '#ff686c', 420, 185);
       this.flares.push({ x: h.x, y: h.y, ttl: 1.3, kind: 'meteor' });
+      this.visual('meteor', h.x, h.y, 1.7);
       this.push('gift', name, 'Ativou CHUVA DE METEOROS', Math.max(1, total));
     } else if (total >= 10) {
       h.damage += Math.min(32, total * .22);
@@ -151,6 +166,7 @@ export class Arena {
       this.announce('MODO BERSERK', name.toUpperCase() + ' ME DEU FORÇA!', '#c88bff', 3);
       this.say(name + ', você me deixou MUITO mais forte!', 4);
       this.pulse(h.x, h.y, '#c88bff', 255, 75);
+      this.visual('berserk', h.x, h.y, 4, { follow: true });
       this.push('gift', name, 'Ativou BERSERK', Math.max(1, total));
     } else {
       this.heal(14 * count);
@@ -179,7 +195,7 @@ export class Arena {
         this.addSupport(name, 1);
         const controls = {
           '!cura': () => { this.heal(34); this.say('Recebi a cura de ' + name + '!'); },
-          '!fogo': () => { this.pulse(h.x, h.y, '#ff915f', 265, 65); this.say(name + ' lançou CHAMAS!', 3.4); },
+          '!fogo': () => { this.visual('fire', h.x, h.y, 1.3); this.pulse(h.x, h.y, '#ff915f', 265, 65); this.say(name + ' lançou CHAMAS!', 3.4); },
           '!gelo': () => { this.flares.push({ kind: 'freeze', x: h.x, y: h.y, ttl: 3 }); this.pulse(h.x, h.y, '#66d9ff', 275, 23); this.say('Congelaram tudo! Boa, ' + name + '!'); },
           '!escudo': () => { h.shield += 40; this.say(name + ' ativou meu escudo!'); this.pulse(h.x, h.y, '#b68cff', 130); },
           '!boss': () => { this.spawnBoss(); this.say('Você quer dificuldade, ' + name + '?!'); }
@@ -197,6 +213,7 @@ export class Arena {
           this.likeCharge -= bursts * 100;
           this.heal(8 * bursts);
           this.pulse(h.x, h.y, '#59caff', 185, 27 * bursts);
+          this.visual('lightning', h.x, h.y, .7);
           this.say('O chat está carregando minha energia!', 3.5);
           this.announce('100 CURTIDAS = CHOQUE', 'RAIO COLETIVO ATIVADO', '#63d7ff', 2);
           this.push('like', 'Comunidade', '+' + bursts * 100 + ' curtidas: CHOQUE!');
@@ -204,6 +221,7 @@ export class Arena {
         break;
       }
       case 'follow':
+        this.visual('summon', h.x - 40, h.y + 15, 1.2);
         this.allies.push({ x: h.x - 40, y: h.y + 15, ttl: 28, name, attackClock: .6, phase: random(0, Math.PI * 2) });
         this.allies.length = Math.min(8, this.allies.length);
         this.say('Bem-vindo ao esquadrão, ' + name + '!');
@@ -234,9 +252,12 @@ export class Arena {
   damageEnemy(enemy, amount, magic = false) {
     if (enemy.hp <= 0) return;
     enemy.hp -= amount;
+    enemy.hitFlash = .18;
+    this.visual('hit', enemy.x, enemy.y, .24, { color: magic ? '#8cfaff' : '#ffe5aa', angle: Math.atan2(enemy.y - this.hero.y, enemy.x - this.hero.x) });
     this.float(Math.round(amount).toString(), enemy.x + random(-12, 12), enemy.y - enemy.r, magic ? '#79f6fd' : '#ffec9c', magic ? 25 : 20);
     this.sparks(enemy.x, enemy.y, colors[enemy.type], magic ? 10 : 5, .8);
     if (enemy.hp <= 0) {
+      this.visual('death', enemy.x, enemy.y, enemy.type === 'boss' ? 1.2 : .65, { type:enemy.type, color: colors[enemy.type], radius: enemy.type === 'boss' ? 180 : 52 });
       this.kills++;
       this.combo = (this.t - this.lastKillAt < 4) ? this.combo + 1 : 1;
       this.lastKillAt = this.t;
@@ -279,6 +300,12 @@ export class Arena {
     const h = this.hero;
     h.hitClock = Math.max(0, h.hitClock - dt);
     h.dashClock = Math.max(0, h.dashClock - dt);
+    h.attackPose = Math.max(0, h.attackPose - dt);
+    h.vx *= Math.exp(-dt * 12); h.vy *= Math.exp(-dt * 12);
+    for (const v of this.visuals) v.ttl -= dt;
+    this.visuals = this.visuals.filter(v => v.ttl > 0);
+    for (const trail of h.trail) trail.ttl -= dt;
+    h.trail = h.trail.filter(trail => trail.ttl > 0);
     this.particles = this.particles.filter(p => p.ttl > 0);
     for (const p of this.particles) { p.ttl -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += dt * 230; }
     this.floaters = this.floaters.filter(f => f.ttl > 0);
@@ -307,39 +334,69 @@ export class Arena {
       this.announce('ONDA ' + this.wave, 'A ARENA FICOU MAIS PERIGOSA', '#5df5d8', 3.2);
     }
 
-    const nearest = [...this.enemies].sort((a, b) => distance(a, h) - distance(b, h))[0];
+    const agent=this.agentDecision?.expiresAt>this.t?this.agentDecision:null;
+    h.noFire=agent?.fire===false;
+    const chosen=agent?.targetId?this.enemies.find(e=>e.id===agent.targetId&&e.hp>0):null;
+    const nearest = chosen||selectTarget(this.enemies,h,h.targetId);
     if (nearest) {
+      h.targetId = nearest.id;
       const d = Math.max(1, distance(h, nearest));
       const dx = (nearest.x - h.x) / d, dy = (nearest.y - h.y) / d;
+      h.aim = Math.atan2(dy, dx);
       h.facing = dx > 0 ? 1 : -1;
       let vx = dx, vy = dy;
       // O NPC circula o alvo quando esta perto e foge se estiver cercado.
       if (d < 140) { vx = -dx * .75 - dy * .7; vy = -dy * .75 + dx * .7; }
+      if(agent){
+        const directions={approach:[dx,dy],retreat:[-dx,-dy],orbit_left:[dy,-dx],orbit_right:[-dy,dx],hold:[0,0],north:[0,-1],south:[0,1],east:[1,0],west:[-1,0]};
+        [vx,vy]=directions[agent.movement]||[vx,vy];
+      }
       const close = this.enemies.filter(e => distance(e, h) < 95).length;
-      if (close >= 3 && h.dashClock === 0) {
+      if ((agent?agent.dash:close >= 3) && h.dashClock === 0) {
         h.dashClock = 3.8;
         this.pulse(h.x, h.y, '#8bf2f9', 100, 25);
-        vx = -dx; vy = -dy;
+        if(!agent){vx = -dx; vy = -dy;}
       }
       const speed = h.speed * (h.dashClock > 3.45 ? 2.7 : 1);
+      const beforeX = h.x, beforeY = h.y;
       h.x = clamp(h.x + vx * speed * dt, LIMITS.left + 22, LIMITS.right - 22);
       h.y = clamp(h.y + vy * speed * dt, LIMITS.top + 22, LIMITS.bottom - 22);
-      h.attackClock -= dt;
-      if (h.attackClock <= 0) {
+      h.vx = dt > 0 ? (h.x-beforeX)/dt : 0; h.vy = dt > 0 ? (h.y-beforeY)/dt : 0;
+      h.stride += Math.hypot(h.x-beforeX,h.y-beforeY) * .085;
+      h.trailClock -= dt;
+      if (h.trailClock <= 0) {
+        h.trailClock = .045;
+        h.trail.push({ x:h.x, y:h.y, facing:h.facing, ttl:.28 });
+        if (h.trail.length > 7) h.trail.shift();
+      }
+      h.attackClock = Math.max(0,h.attackClock-dt);
+      if (h.attackClock <= 0 && !h.noFire) {
         h.attackClock = h.rate;
-        this.bullets.push({ x: h.x + h.facing * 25, y: h.y - 25, vx: dx * 550, vy: dy * 550, r: 11, ttl: 1.1, damage: h.damage, friendly: true, color: '#93f9f3' });
+        h.attackPose = Math.min(.28,h.rate*.8); h.attackSerial++;
+        const origin={x:h.x+h.facing*25,y:h.y-25};
+        const aim=intercept(origin,nearest,550,1.1);
+        h.aim=aim.angle;
+        this.visual('slash', h.x, h.y-25, .28, { angle:h.aim, flip:h.attackSerial%2 });
+        this.combatStats.shots++;
+        this.bullets.push({ ...origin, vx:Math.cos(aim.angle)*550, vy:Math.sin(aim.angle)*550, r:11, ttl:1.1, damage:h.damage, friendly:true, source:'hero', color:'#93f9f3' });
         this.sparks(h.x + h.facing * 33, h.y - 22, '#bafff5', 5, .55);
       }
     }
 
     for (const e of [...this.enemies]) {
       e.a += dt * 3;
+      e.born = Math.max(0,e.born-dt); e.hitFlash = Math.max(0,e.hitFlash-dt);
       const d = Math.max(1, distance(e, h));
+      e.aim = Math.atan2(h.y-e.y,h.x-e.x);
+      e.moving = d > e.r + 21;
+      e.vx=0;e.vy=0;
+      e.frozen = this.flares.some(f => f.kind === 'freeze' && distance(e, f) < 275);
       if (d > e.r + 21) {
-        const frozen = this.flares.some(f => f.kind === 'freeze' && distance(e, f) < 275);
-        const move = frozen ? .16 : 1;
-        e.x += (h.x - e.x) / d * e.speed * dt * move;
-        e.y += (h.y - e.y) / d * e.speed * dt * move;
+        const move = e.frozen ? .16 : 1;
+        e.stride += e.speed * move * dt * .09;
+        e.vx=(h.x-e.x)/d*e.speed*move;e.vy=(h.y-e.y)/d*e.speed*move;
+        e.x += e.vx*dt;
+        e.y += e.vy*dt;
       } else if (h.hitClock <= 0) {
         let damage = e.damage;
         if (h.shield > 0) { const absorb = Math.min(h.shield, damage); h.shield -= absorb; damage -= absorb; }
@@ -353,6 +410,7 @@ export class Arena {
         e.attackClock -= dt;
         if (e.attackClock <= 0) {
           e.attackClock = 2.3;
+          this.visual('bossAttack', e.x, e.y, .55, { angle:e.aim });
           for (let i = 0; i < 7; i++) {
             const a = Math.atan2(h.y - e.y, h.x - e.x) + (i - 3) * .19;
             this.bullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * 230, vy: Math.sin(a) * 230, ttl: 3, r: 11, damage: 12, friendly: false, color: '#ff9a70' });
@@ -362,10 +420,15 @@ export class Arena {
     }
     this.bullets = this.bullets.filter(b => b.ttl > 0);
     for (const b of this.bullets) {
+      const oldX=b.x,oldY=b.y;
       b.x += b.vx * dt; b.y += b.vy * dt; b.ttl -= dt;
       if (b.friendly) {
-        const target = this.enemies.find(e => distance(e, b) < e.r + b.r);
-        if (target) { this.damageEnemy(target, b.damage); b.ttl = 0; }
+        let target=null,first=Infinity;
+        for(const e of this.enemies){
+          const hit=segmentCircleHit(oldX,oldY,b.x,b.y,e.x,e.y,e.r+b.r);
+          if(hit!==null&&hit<first){target=e;first=hit;}
+        }
+        if (target) { this.damageEnemy(target, b.damage); b.ttl = 0; if(b.source==='hero')this.combatStats.hits++; }
       } else if (distance(h, b) < 19 + b.r && h.hitClock === 0) {
         const absorb = Math.min(h.shield, b.damage);
         h.shield -= absorb; h.hp -= b.damage - absorb;
@@ -381,7 +444,10 @@ export class Arena {
       if (ally.attackClock <= 0) {
         ally.attackClock = .85;
         const enemy = [...this.enemies].sort((a,b) => distance(a,ally)-distance(b,ally))[0];
-        if (enemy) this.bullets.push({ x: ally.x, y: ally.y, vx: (enemy.x - ally.x) / Math.max(1,distance(enemy,ally)) * 440, vy: (enemy.y - ally.y) / Math.max(1,distance(enemy,ally)) * 440, ttl: 1.5, r: 8, damage: 15, friendly: true, color: '#ffe3b2' });
+        if (enemy) {
+          const aim=intercept(ally,enemy,440,1.5);
+          this.bullets.push({x:ally.x,y:ally.y,vx:Math.cos(aim.angle)*440,vy:Math.sin(aim.angle)*440,ttl:1.5,r:8,damage:15,friendly:true,color:'#ffe3b2'});
+        }
       }
     }
     this.allies = this.allies.filter(a => a.ttl > 0);

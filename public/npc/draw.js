@@ -1,23 +1,36 @@
 import { WIDTH, HEIGHT } from './engine.js';
+import { glow, groundVfx, foregroundVfx } from './vfx.js';
 
 const TAU = Math.PI * 2;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const images = Object.fromEntries(['eclipse-arena','kaito','slime','hunter','tank','boss'].map(name => {
+const artNames=['eclipse-arena','kaito','kaito-attack','kaito-windup','kaito-swing','slime','hunter','tank','boss',
+  ...Array.from({length:6},(_,i)=>`kaito-run-${i}`),
+  ...['hunter','tank','boss'].flatMap(type=>Array.from({length:3},(_,i)=>`${type}-motion-${i}`))];
+const images = Object.fromEntries(artNames.map(name => {
   const img = new Image();
   img.src = new URL(`./assets/${name}.webp`, import.meta.url).href;
   return [name, img];
 }));
 const ready = img => img?.complete && img.naturalWidth > 0;
 
-function sprite(ctx, img, x, footY, height, facing = 1, tilt = 0) {
+function sprite(ctx, img, x, footY, height, facing = 1, tilt = 0, motion = {}) {
   if (!ready(img)) return false;
   const width = height * img.naturalWidth / img.naturalHeight;
   ctx.save();
   ctx.translate(x, footY);
-  ctx.scale(facing, 1);
+  ctx.scale(facing*(motion.sx||1), motion.sy||1);
   ctx.rotate(tilt);
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, -width / 2, -height, width, height);
+  if(motion.flutter){
+    // Continuous strip deformation gives the coat follow-through without separating the artwork.
+    const slices=24;
+    for(let i=0;i<slices;i++){
+      const u=i/slices,sh=img.naturalHeight/slices;
+      const offset=Math.sin(motion.flutter+u*9)*(motion.strength||2)*Math.max(0,(u-.3)/.7);
+      ctx.drawImage(img,0,i*sh,img.naturalWidth,Math.min(sh+1,img.naturalHeight-i*sh),
+        -width*(motion.anchorX??.5)+offset,-height+u*height,width,height/slices+.3);
+    }
+  }else ctx.drawImage(img, -width*(motion.anchorX??.5), -height, width, height);
   ctx.restore();
   return true;
 }
@@ -161,12 +174,24 @@ function enemy(ctx,e,t){
   ctx.save();ctx.translate(e.x,e.y);
   const isBoss=e.type==='boss', isTank=e.type==='tank';
   const s=isBoss?1.75:isTank?1.18:1;
-  const bounce=Math.sin(t*4+(e.id||0))*(isBoss?5:3);
+  const gait=e.frozen?0:Math.sin(e.stride||0);
+  const bounce=isBoss?Math.sin(t*2)*4:e.moving?-Math.abs(gait)*(isTank?2:6):Math.sin(t*3+e.id)*1.5;
   ellipse(ctx,0,e.r+12,s*25,9,'#000d20a8');
   ctx.translate(0,bounce);
   aura(ctx,0,0,isBoss?118:58,isBoss?'#ff703e':isTank?'#b179fd':e.type==='hunter'?'#f34b79':'#41f5db',isBoss?.34:.16);
   const size = isBoss ? 188 : isTank ? 112 : e.type === 'hunter' ? 91 : 76;
-  if (sprite(ctx, images[e.type], 0, e.r + 15, size, 1, Math.sin(t * 2 + e.id) * .025)) {
+  const squash=e.type==='slime'?gait*.12:Math.sin(t*2+e.id)*.018;
+  const appear=1-Math.pow(clamp((e.born||0)/.55,0,1),3);
+  ctx.globalAlpha=clamp(appear,0,1);
+  if(e.hitFlash>0)ctx.filter='brightness(1.8) saturate(.5)';
+  else if(e.frozen)ctx.filter='saturate(.35) brightness(1.25)';
+  const cycle=[0,1,2,1][Math.floor((e.stride||0)*.75)%4];
+  const bossFrame=e.attackClock<.7?0:e.attackClock>2.1?1:e.attackClock>1.8?2:cycle;
+  const animated=images[`${e.type}-motion-${isBoss?bossFrame:cycle}`];
+  const enemyArt=ready(animated)?animated:images[e.type];
+  if (sprite(ctx, enemyArt, -Math.cos(e.aim||0)*(e.hitFlash||0)*42, e.r + 15, size,
+    1, isTank?gait*.025:e.type==='hunter'?Math.cos(e.aim||0)*.1+gait*.035:Math.sin(t*2+e.id)*.025,
+    {sx:(1-squash*.6)*appear,sy:(1+squash)*appear})) {
     ctx.restore();
     const ratio=clamp(e.hp/e.maxHp,0,1);
     if(ratio<.999 || isBoss){
@@ -216,7 +241,7 @@ function ally(ctx,a,t){
   ctx.restore();
 }
 
-function hero(ctx,h,t){
+function hero(ctx,h,t,reduced=false){
   const x=h.x, y=h.y;
   const facing=h.facing||1;
   const swing=Math.sin(t*19);
@@ -230,25 +255,35 @@ function hero(ctx,h,t){
     ctx.strokeStyle='#7fe7ff3a';ctx.lineWidth=1;ctx.stroke();
   }
   if (ready(images.kaito)) {
-    if (h.dashClock > 3.45) {
-      ctx.save();ctx.globalAlpha=.25;
-      sprite(ctx, images.kaito, x-facing*54, y+43, 173, facing, -.05);
-      ctx.restore();
+    const dash=h.dashClock>3.45;
+    const speed=clamp(Math.hypot(h.vx||0,h.vy||0)/h.speed,0,1);
+    const attack=h.attackPose>0;
+    const progress=attack?clamp(1-h.attackPose/Math.min(.28,h.rate*.8),0,1):1;
+    const thrust=attack?Math.sin(progress*Math.PI)*13:0;
+    const windup=!h.noFire&&h.attackClock<.1?clamp(1-h.attackClock/.1,0,1):0;
+    const gait=Math.sin(h.stride||0);
+    if(dash&&!reduced){
+      for(const trail of (h.trail||[]).filter((_,i)=>i%2===0)){
+        ctx.save();ctx.globalAlpha=trail.ttl*.65;
+        sprite(ctx,images.kaito,trail.x,trail.y+43,173,trail.facing,-.16,{sx:1.08,sy:.93});
+        ctx.restore();
+      }
     }
     ctx.save();
     if (h.hitClock > .38) ctx.filter = 'brightness(1.8) saturate(.5)';
-    sprite(ctx, images.kaito, x, y+43+Math.sin(t*9)*2, 173, facing,
-      Math.sin(t*4)*.012 + (h.dashClock > 3.45 ? -.09 : 0));
+    const runFrame=Math.floor((h.stride||0)*1.1)%6;
+    const moving=speed>.15&&!attack&&!windup;
+    const poseName=windup?'kaito-windup':attack?(progress<.38?'kaito-swing':progress<.78?'kaito-attack':'kaito'):moving?`kaito-run-${runFrame}`:'kaito';
+    const pose=ready(images[poseName])?images[poseName]:images.kaito;
+    const poseFacing=moving&&Math.abs(h.vx)>15?Math.sign(h.vx):facing;
+    sprite(ctx, pose, x+Math.cos(h.aim||0)*thrust-facing*windup*4,
+      y+43-Math.abs(gait)*speed*5+Math.sin(t*2)*1.2,173,poseFacing,
+      (dash?-.16:0)+gait*.025*speed+windup*.035-thrust*.004,
+      {sx:1+(dash?.08:thrust*.002),sy:1-(dash?.07:Math.abs(gait)*speed*.02),flutter:t*8,strength:reduced?1:2+speed*2,anchorX:moving?.67:.5});
     ctx.restore();
-    if (h.attackClock > h.rate - .13) {
-      ctx.save();
-      ctx.translate(x+facing*24,y-40);
-      ctx.scale(facing,1);
-      ctx.rotate(-.33);
-      ctx.shadowColor='#8dfff4';ctx.shadowBlur=22;
-      ctx.beginPath();ctx.ellipse(0,0,78,51,0,-1.2,1.1);
-      ctx.strokeStyle='#d9fffbba';ctx.lineWidth=7;ctx.stroke();
-      ctx.restore();
+    if(speed>.4&&!reduced){
+      ctx.save();ctx.globalAlpha=.16;
+      ctx.beginPath();ctx.ellipse(x,y+43,20+Math.abs(gait)*13,5,0,0,TAU);ctx.strokeStyle='#8ce8e2';ctx.lineWidth=2;ctx.stroke();ctx.restore();
     }
     if(h.hitClock>.25) ring(ctx,x,y-19,62,'#ff6c8422','#ff9bab',3);
     return;
@@ -303,64 +338,27 @@ function heroShadow(ctx,x,y,facing) {
 
 function bullet(ctx,b) {
   const color=b.color||'#a8ffe9';
-  ctx.save();ctx.shadowColor=color;ctx.shadowBlur=16;
-  line(ctx,b.x-b.vx*.038,b.y-b.vy*.038,b.x,b.y,color,b.r*.7);
-  ring(ctx,b.x,b.y,b.r*.9,color);
-  ring(ctx,b.x,b.y,b.r*.35,'#fff');
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.translate(b.x,b.y);ctx.rotate(Math.atan2(b.vy,b.vx));
+  glow(ctx,0,0,b.r*3,color,.45);
+  const g=ctx.createLinearGradient(-65,0,8,0);g.addColorStop(0,color+'00');g.addColorStop(1,color+'cc');
+  ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-65,0);ctx.quadraticCurveTo(-15,-b.r,8,0);ctx.quadraticCurveTo(-15,b.r,-65,0);ctx.fill();
+  poly(ctx,[[-14,0],[0,-b.r*.55],[9,0],[0,b.r*.55]],b.friendly?'#dbfff8':'#ffe7b5');
   ctx.restore();
 }
 
 function particles(ctx,arena) {
-  ctx.save();ctx.globalCompositeOperation='lighter';
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.lineCap='round';
   for(const f of arena.effects) {
-    const progress=1-f.ttl/f.max,r=f.radius*progress;
-    ctx.beginPath();ctx.arc(f.x,f.y,r,0,TAU);
-    ctx.strokeStyle=f.color;
-    ctx.globalAlpha=(1-progress)*.75;
-    ctx.lineWidth=clamp((1-progress)*18,2,18);
-    ctx.stroke();
-    ctx.globalAlpha=1;
-  }
-  for (const f of arena.flares) {
-    const p=clamp(f.ttl/(f.kind==='god'?1.9:f.kind==='meteor'?1.3:3),0,1);
-    if(f.kind==='meteor'){
-      for(let i=0;i<7;i++){
-        const x=(90+i*91),y=450+(i%4)*105 + (1-p)*230;
-        aura(ctx,x,y,90,'#ff874a',.3*p);
-        line(ctx,x-43,y-130,x,y,'#ffbd8b',10*p);
-      }
-    } else if(f.kind==='god'){
-      aura(ctx,f.x,f.y,270,'#ffe7a2',.32*p);
-      ctx.save();
-      ctx.translate(f.x,f.y);
-      ctx.rotate((1-p)*.6);
-      for(let i=0;i<12;i++){
-        const angle=i*TAU/12, inner=75+(i%3)*12, outer=135+(i%4)*16;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(angle)*inner,Math.sin(angle)*inner);
-        ctx.lineTo(Math.cos(angle-.018)*outer,Math.sin(angle-.018)*outer);
-        ctx.lineTo(Math.cos(angle+.018)*outer,Math.sin(angle+.018)*outer);
-        ctx.closePath();
-        ctx.fillStyle=`rgba(255,236,168,${.3*p})`;
-        ctx.fill();
-      }
-      ctx.beginPath();ctx.ellipse(0,20,165+(1-p)*35,75+(1-p)*15,0,0,TAU);
-      ctx.strokeStyle=`rgba(255,236,169,${.75*p})`;ctx.lineWidth=7*p;ctx.stroke();
-      ctx.restore();
-    } else if(f.kind==='freeze') {
-      aura(ctx,f.x,f.y,285,'#7addff',.16*p);
-      for(let i=0;i<12;i++){
-        const a=i*TAU/12+f.ttl*.1,r=220;
-        ring(ctx,f.x+Math.cos(a)*r,f.y+Math.sin(a)*r,3,'#a4f5ff');
-      }
-    }
+    const p=clamp(1-f.ttl/f.max,0,1),r=Math.min(430,f.radius)*(1-(1-p)**3);
+    ctx.save();ctx.globalAlpha=(1-p)*.35;ctx.translate(f.x,f.y);ctx.scale(1,.65);
+    ctx.beginPath();ctx.arc(0,0,r,0,TAU);ctx.strokeStyle=f.color;ctx.lineWidth=Math.max(1,(1-p)*7);ctx.stroke();ctx.restore();
   }
   for(const p of arena.particles){
     const alpha=clamp(p.ttl/p.max,0,1);
     ctx.globalAlpha=alpha;
-    ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+    line(ctx,p.x-p.vx*.018,p.y-p.vy*.018,p.x,p.y,p.color,Math.max(1,p.size*alpha*.65));
+    if(p.size>4.8)ring(ctx,p.x,p.y,p.size*.3,'#fff5de');
   }
-  ctx.globalAlpha=1;
   ctx.restore();
 }
 
@@ -375,13 +373,14 @@ function floaters(ctx,items) {
   ctx.restore();
 }
 
-export function draw(ctx,arena) {
+export function draw(ctx,arena,{reduced=false}={}) {
   const { t }=arena;
   ctx.clearRect(0,0,WIDTH,HEIGHT);
   ctx.save();
-  const trauma=arena.shake*.5;
+  const trauma=reduced?0:Math.min(8,arena.shake*.45);
   if(trauma>.01)ctx.translate(Math.sin(t*61)*trauma,Math.cos(t*73)*trauma);
   background(ctx,t,arena);
+  groundVfx(ctx,arena,reduced);
   // Sort entities on feet position to preserve depth.
   const subjects=arena.enemies.map(e=>({y:e.y,kind:'enemy',data:e}));
   subjects.push(...arena.allies.map(a=>({y:a.y,kind:'ally',data:a})));
@@ -390,10 +389,24 @@ export function draw(ctx,arena) {
   for(const s of subjects){
     if(s.kind==='enemy')enemy(ctx,s.data,t);
     else if(s.kind==='ally')ally(ctx,s.data,t);
-    else if(arena.phase==='combat')hero(ctx,s.data,t);
+    else if(arena.phase==='combat')hero(ctx,s.data,t,reduced);
+  }
+  for(const v of arena.visuals){
+    if(v.kind!=='death'||!v.type)continue;
+    const p=clamp(1-v.ttl/v.max,0,1);
+    ctx.save();ctx.globalAlpha=(1-p)*.65;
+    sprite(ctx,images[v.type],v.x,v.y+25+p*18,v.type==='boss'?188:90,1,p*.6,{sy:1-p*.7,sx:1+p*.15});
+    ctx.restore();
+  }
+  if(arena.phase==='dead'){
+    const p=clamp((5-arena.afterDeath)/.85,0,1);
+    ctx.save();ctx.globalAlpha=Math.max(0,1-(5-arena.afterDeath)/2.3);
+    sprite(ctx,images.kaito,arena.hero.x,arena.hero.y+42,173,arena.hero.facing,p*1.45,{sy:1-p*.35});
+    ctx.restore();
   }
   for(const b of arena.bullets)bullet(ctx,b);
   particles(ctx,arena);
+  foregroundVfx(ctx,arena,reduced);
   floaters(ctx,arena.floaters);
   // Atmospheric vignette on the battle zone edges.
   const vignette=ctx.createRadialGradient(360,720,290,360,720,830);

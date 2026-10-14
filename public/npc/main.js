@@ -1,4 +1,5 @@
 import { TikTokGameClient } from '../tiktok-game-client.js';
+import { JevPilot } from './jev-client.js';
 import { Arena } from './engine.js';
 import { draw } from './draw.js';
 
@@ -6,6 +7,15 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('world');
 const ctx = canvas.getContext('2d', { alpha: false });
 const game = new Arena();
+const pilot = new JevPilot(game, info => {
+  $('jev-status').textContent=info.text;
+  $('jev-mode').textContent=info.state==='active'?'API ATIVA':'PILOTO LOCAL';
+  $('jev-detail').textContent=info.model ? info.model+' · '+info.latencyMs+' ms' : '';
+  $('jev-connect').disabled=!pilot.config?.ready;
+});
+$('jev-form').addEventListener('submit',event=>{event.preventDefault();pilot.start($('jev-token').value.trim());$('jev-token').value='';});
+$('jev-stop').addEventListener('click',()=>pilot.stop());
+pilot.init();
 const params = new URLSearchParams(location.search);
 if (params.get('overlay') === '1') document.body.classList.add('overlay');
 
@@ -17,6 +27,19 @@ let lastVoiceTime = -10;
 let totalEvents = 0;
 let voiceEnabled = localStorage.getItem('npc-chaos-voice') === 'yes';
 let currentUtterance = null;
+let reducedEffects = localStorage.getItem('npc-chaos-effects') === 'reduced' ||
+  (localStorage.getItem('npc-chaos-effects') === null && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const renderMetrics={frames:0,totalMs:0,maxMs:0};
+function updateEffectsButton(){
+  $('effects-toggle').textContent=reducedEffects?'Efeitos: suaves':'Efeitos: completos';
+  $('effects-toggle').setAttribute('aria-pressed',String(reducedEffects));
+}
+$('effects-toggle').addEventListener('click',()=>{
+  reducedEffects=!reducedEffects;
+  localStorage.setItem('npc-chaos-effects',reducedEffects?'reduced':'full');
+  updateEffectsButton();
+});
+updateEffectsButton();
 
 function voiceSay(text) {
   if (!voiceEnabled || !('speechSynthesis' in window) || !text) return;
@@ -90,6 +113,7 @@ function showEntries() {
 }
 
 function updateHUD() {
+  if(pilot.enabled && (!game.agentDecision || game.agentDecision.expiresAt<=game.t)) $('jev-mode').textContent='PILOTO LOCAL';
   const h = game.hero;
   $('hero-level').textContent = 'LVL ' + h.level;
   $('hero-hp').textContent = Math.max(0, Math.ceil(h.hp)) + ' / ' + h.maxHp;
@@ -158,7 +182,10 @@ function frame(now) {
   const dt = Math.min((now - prev) / 1000, .05);
   prev = now;
   game.update(dt);
-  draw(ctx, game);
+  const renderStart=performance.now();
+  draw(ctx, game, {reduced:reducedEffects});
+  const renderMs=performance.now()-renderStart;
+  renderMetrics.frames++;renderMetrics.totalMs+=renderMs;renderMetrics.maxMs=Math.max(renderMetrics.maxMs,renderMs);
   uiTimer += dt;
   if (uiTimer > .1) {
     uiTimer = 0;
@@ -172,7 +199,8 @@ requestAnimationFrame(frame);
 document.addEventListener('visibilitychange', () => { prev = performance.now(); });
 window.addEventListener('beforeunload', () => {
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+  pilot.stop(false);
   bridge.close();
 });
 // Inspecionavel em Playwright e no console, sem controles obrigatorios para jogar.
-window.NPC_CHAOS = { game, getStatus: () => status, test: (type, options = {}) => bridge.sendDemo(type, options) };
+window.NPC_CHAOS = { game, renderMetrics, getStatus: () => status, test: (type, options = {}) => bridge.sendDemo(type, options) };
