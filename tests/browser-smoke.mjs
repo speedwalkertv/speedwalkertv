@@ -52,6 +52,25 @@ try {
   await page.locator('[data-test=follow]').click();
   await page.waitForFunction(() => window.NPC_CHAOS.game.allies.length >= 1);
   assert.ok((await page.locator('#activity-list .activity').count()) > 0);
+  const jevPage=await browser.newPage({viewport:{width:1650,height:1050}});
+  jevPage.on('pageerror',e=>pageErrors.push('jev: '+String(e)));
+  let decisions=0;
+  await jevPage.route('**/api/jev/status',route=>route.fulfill({json:{ready:true,configuration:'ok',provider:'TypeSafe',model:'jev-latest',intervalMs:2000}}));
+  await jevPage.route('**/api/jev/decision',route=>{
+    decisions++;
+    const request=route.request();
+    assert.equal(request.headers().authorization,'Bearer private-test-token-at-least-24');
+    route.fulfill({json:{source:'typesafe-api',movement:'retreat',fire:true,dash:false,targetId:null,confidence:.9,latencyMs:175,model:'jev-latest'}});
+  });
+  await jevPage.goto('http://127.0.0.1:'+port+'/npc/');
+  await jevPage.locator('#jev-connect').waitFor({state:'visible'});
+  await jevPage.waitForFunction(()=>!document.querySelector('#jev-connect').disabled);
+  await jevPage.locator('#jev-token').fill('private-test-token-at-least-24');
+  await jevPage.locator('#jev-connect').click();
+  await jevPage.waitForFunction(()=>window.NPC_CHAOS?.game.agentDecision?.movement==='retreat');
+  assert.equal(await jevPage.locator('#jev-mode').innerText(),'API ATIVA');
+  assert.ok(decisions>0,'Jev should issue decisions');
+  await jevPage.close();
   await mkdir(screenshotDir,{recursive:true});
   const deskPath=path.join(screenshotDir,'npc-chaos-desktop.png');
   await page.screenshot({path:deskPath,fullPage:true});

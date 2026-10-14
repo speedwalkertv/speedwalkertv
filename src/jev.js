@@ -15,7 +15,7 @@ export function observation(raw){
 }
 export function requestFor(state,model){
   return {model,state,questions:{
-    target:{type:'choice',instructions:'Choose the enemy to shoot now. Prioritize imminent threats and easy eliminations; keep a safe distance. IDs refer to enemies in state.',criteria:Object.fromEntries([['nearest','Nearest living threat'],...state.enemies.map(e=>[e.id,`${e.type} at (${e.x},${e.y}), HP ${e.hp}`])])},
+    target:{type:'choice',instructions:'Choose the enemy to shoot now. Prioritize imminent threats and easy eliminations; keep a safe distance. IDs refer to enemies in state.',criteria:Object.fromEntries([['nearest','Nearest living threat, if there is one'],['none','No living enemy currently available'],...state.enemies.map(e=>[e.id,`${e.type} at (${e.x},${e.y}), HP ${e.hp}`])])},
     movement:{type:'choice',instructions:'Choose one movement for the next two seconds. Survive, avoid incoming projectiles and enemy contact, remain inside arena bounds. Approach only when enemies are too far; retreat when surrounded or low on health. Orbit choices move around the selected target.',criteria:{approach:'Move toward the target',retreat:'Move away from the target',orbit_left:'Circle counterclockwise around the target',orbit_right:'Circle clockwise around the target',hold:'Stay in place',north:'Move up',south:'Move down',east:'Move right',west:'Move left'}},
     fire:{type:'noul',instructions:'Firing at the selected enemy now is useful. Shots cost no ammunition.'},
     dash:{type:'noul',instructions:'Use the available dash now to evade immediate danger. Dash has a cooldown, so avoid wasting it. False if dashReady is false.'}
@@ -23,22 +23,23 @@ export function requestFor(state,model){
 }
 export function decisionFrom(response,state){
   const a=response?.answers;
-  if(!a||!MOVES.includes(a.movement?.choice)||!['nearest',...state.enemies.map(e=>e.id)].includes(a.target?.choice))throw new Error('invalid_response');
+  if(!a||!MOVES.includes(a.movement?.choice)||!['nearest','none',...state.enemies.map(e=>e.id)].includes(a.target?.choice))throw new Error('invalid_response');
   if(!Number.isFinite(a.fire?.noul)||!Number.isFinite(a.dash?.noul))throw new Error('invalid_response');
-  return {targetId:a.target.choice==='nearest'?null:Number(a.target.choice),movement:a.movement.choice,fire:a.fire.noul>=.5,dash:a.dash.noul>=.7,
+  return {targetId:['nearest','none'].includes(a.target.choice)?null:Number(a.target.choice),movement:a.movement.choice,fire:a.fire.noul>=.5,dash:a.dash.noul>=.7,
     confidence:number(a.movement.confidence,0,1),model:typeof response.model==='string'?response.model.slice(0,60):'jev'};
 }
 
 export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now}={}){
   const key=env.TYPESAFE_API_KEY?.trim(),token=env.JEV_CONTROL_TOKEN?.trim();
-  const ready=Boolean(key&&token&&token.length>=24),model=env.JEV_MODEL||'jev-latest';
+  const configuration=!key?'missing_api_key':!token?'missing_control_token':token.length<24?'control_token_too_short':'ok';
+  const ready=configuration==='ok',model=env.JEV_MODEL||'jev-latest';
   let busy=false,nextAt=0,hourAt=now(),calls=0;
   const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
   return async(req,res,url)=>{
     if(!url.pathname.startsWith('/api/jev/'))return false;
-    if(url.pathname==='/api/jev/status'&&req.method==='GET'){send(res,200,{ready,provider:'TypeSafe',model,intervalMs:2000});return true;}
+    if(url.pathname==='/api/jev/status'&&req.method==='GET'){send(res,200,{ready,configuration,provider:'TypeSafe',model,intervalMs:2000});return true;}
     if(url.pathname!=='/api/jev/decision'||req.method!=='POST'){send(res,404,{error:'not_found'});return true;}
-    if(!ready){send(res,503,{error:'not_configured'});return true;}
+    if(!ready){send(res,503,{error:'not_configured',configuration});return true;}
     const provided=String(req.headers.authorization||'').replace(/^Bearer /,'');
     const a=Buffer.from(provided),b=Buffer.from(token);
     if(a.length!==b.length||!timingSafeEqual(a,b)){send(res,401,{error:'unauthorized'});return true;}
@@ -60,15 +61,21 @@ export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now}=
       const started=now();
       const response=await fetchImpl('https://api.typesafe.ai/v1/systemone',{
         method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-        body:JSON.stringify(requestFor(state,model)),signal:AbortSignal.timeout(2500)
+        body:JSON.stringify(requestFor(state,model)),signal:AbortSignal.timeout(9000)
       });
-      if(!response.ok){nextAt=now()+10000;send(res,502,{error:response.status===401?'provider_auth':'provider_unavailable'});return true;}
-      const data=decisionFrom(await response.json(),state);
+      if(!response.ok){
+        nextAt=now()+10000;
+        const errors={400:'provider_bad_request',401:'provider_auth',403:'provider_auth',402:'provider_no_credits',404:'provider_model_unavailable',429:'provider_rate_limited'};
+        send(res,502,{error:errors[response.status]||'provider_unavailable',providerStatus:response.status});return true;
+      }
+      let data;
+      try{data=decisionFrom(await response.json(),state);}
+      catch{nextAt=now()+5000;send(res,502,{error:'provider_invalid_response'});return true;}
       send(res,200,{...data,latencyMs:now()-started,source:'typesafe-api'});
     }catch(error){
       const input=['invalid_state','body_too_large'].includes(error.message)||error instanceof SyntaxError;
       if(!input)nextAt=now()+5000;
-      send(res,input?400:502,{error:input?'invalid_state':'decision_unavailable'});
+      send(res,input?400:502,{error:input?'invalid_state':error.name==='TimeoutError'?'provider_timeout':'decision_unavailable'});
     }finally{clearTimeout(bodyTimer);busy=false;}
     return true;
   };
