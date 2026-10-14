@@ -15,8 +15,20 @@ if (username && !/^[\w.]{2,40}$/.test(username)) throw new Error('TIKTOK_USERNAM
 const mode = username ? 'live' : 'demo';
 const host = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
 const port = Number(process.env.PORT ?? 8787);
-const mimeTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webp': 'image/webp' };
+const mimeTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8', '.mp3': 'audio/mpeg' };
 const publicDir = path.join(root, 'public');
+
+// Serve qualquer arquivo de /public com extensao permitida; bloqueia traversal e dotfiles.
+function resolvePublicFile(pathname) {
+  let decoded;
+  try { decoded = decodeURIComponent(pathname); } catch { return null; }
+  if (decoded.includes('\0') || decoded.split('/').some((part) => part.startsWith('.'))) return null;
+  let rel = decoded.replace(/^\/+/, '');
+  if (rel === '' || rel.endsWith('/') || !path.extname(rel)) rel = path.posix.join(rel, 'index.html');
+  const full = path.resolve(publicDir, rel);
+  if (!full.startsWith(publicDir + path.sep)) return null;
+  return mimeTypes[path.extname(full)] ? path.relative(publicDir, full) : null;
+}
 
 let status = { state: mode === 'demo' ? 'demo' : 'connecting', mode, username, roomId: null, message: '' };
 let liveConnection = null;
@@ -39,26 +51,7 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ ok: true, ...status }));
     return;
   }
-  const paths = {
-    '/index.html': 'index.html', '/game.js': 'game.js',
-    '/tiktok-game-client.js': 'tiktok-game-client.js', '/style.css': 'style.css',
-    '/npc': 'npc/index.html', '/npc/': 'npc/index.html',
-    '/npc/index.html': 'npc/index.html', '/npc/main.js': 'npc/main.js',
-    '/npc/engine.js': 'npc/engine.js', '/npc/draw.js': 'npc/draw.js',
-    '/npc/vfx.js':'npc/vfx.js', '/npc/combat-ai.js':'npc/combat-ai.js',
-    '/npc/jev-client.js':'npc/jev-client.js', '/npc/jev-memory.js':'npc/jev-memory.js',
-    '/npc/jev-folder.js':'npc/jev-folder.js',
-    '/npc/memory':'npc/memory/index.html', '/npc/memory/':'npc/memory/index.html',
-    '/npc/memory/index.html':'npc/memory/index.html',
-    '/npc/memory/main.js':'npc/memory/main.js',
-    '/npc/memory/style.css':'npc/memory/style.css',
-    '/npc/style.css': 'npc/style.css',
-    ...Object.fromEntries(['eclipse-arena','kaito','kaito-attack','kaito-windup','kaito-swing','slime','hunter','tank','boss',
-      ...Array.from({length:6},(_,i)=>`kaito-run-${i}`),
-      ...['hunter','tank','boss'].flatMap(type=>Array.from({length:3},(_,i)=>`${type}-motion-${i}`))].map(name =>
-      [`/npc/assets/${name}.webp`, `npc/assets/${name}.webp`]))
-  };
-  const file = paths[url.pathname];
+  const file = resolvePublicFile(url.pathname);
   if (!file) { res.writeHead(404).end('Not found'); return; }
   try {
     const body = await readFile(path.join(publicDir, file));
@@ -66,6 +59,7 @@ const server = http.createServer(async (req, res) => {
     res.end(body);
   } catch (error) {
     console.error('Erro de arquivo:', error.message);
+    if (error.code === 'ENOENT') { res.writeHead(404).end('Not found'); return; }
     res.writeHead(500).end('Internal error');
   }
 });

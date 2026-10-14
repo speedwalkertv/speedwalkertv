@@ -1,4 +1,4 @@
-# TikTok LIVE Game Bridge
+# NPC CHAOS LIVE — TikTok LIVE Game Bridge
 
 ## Jogo pronto: NPC CHAOS LIVE
 
