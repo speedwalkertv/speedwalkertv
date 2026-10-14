@@ -36,7 +36,7 @@ export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now,b
   const key=env.TYPESAFE_API_KEY?.trim(),token=env.JEV_CONTROL_TOKEN?.trim();
   const configuration=!key?'missing_api_key':!token?'missing_control_token':token.length<24?'control_token_too_short':'ok';
   const ready=configuration==='ok',memoryReady=Boolean(token&&token.length>=24),model=env.JEV_MODEL||'jev-latest';
-  let busy=false,nextAt=0,hourAt=now(),calls=0;
+  let busy=false,nextAt=0,hourAt=now(),calls=0,last=null;
   const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
   const readJson=async(req,maxBytes)=>{
     let body='',bytes=0;
@@ -105,7 +105,7 @@ export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now,b
       return true;
     }
     if(now()-hourAt>=3600000){hourAt=now();calls=0;}
-    if(busy||now()<nextAt||calls>=1800){send(res,429,{error:'rate_limit'});return true;}
+    if(busy||now()<nextAt||calls>=1800){send(res,429,{error:'rate_limit',retryAfterMs:Math.max(500,nextAt-now()),...(last?{lastError:last}:{})});return true;}
     // Lock before reading the body to prevent parallel callers from bypassing the quota.
     busy=true;
     const bodyTimer=setTimeout(()=>req.destroy(),4000);
@@ -125,11 +125,13 @@ export function createJevHandler({env=process.env,fetchImpl=fetch,now=Date.now,b
         const errors={400:'provider_bad_request',422:'provider_bad_request',401:'provider_auth',403:'provider_auth',402:'provider_no_credits',404:'provider_model_unavailable',429:'provider_rate_limited'};
         let detail='';try{detail=(await response.text()).replace(/\s+/g,' ').slice(0,300);}catch{}
         if([400,422].includes(response.status))console.error('TypeSafe rejeitou a solicitacao:',response.status,detail);
-        send(res,502,{error:errors[response.status]||'provider_unavailable',providerStatus:response.status,...([400,422].includes(response.status)&&detail?{providerDetail:detail}:{})});return true;
+        last={error:errors[response.status]||'provider_unavailable',providerStatus:response.status,...([400,422].includes(response.status)&&detail?{providerDetail:detail}:{})};
+        send(res,502,last);return true;
       }
       let data;
       try{data=decisionFrom(await response.json(),state);}
       catch{nextAt=now()+5000;send(res,502,{error:'provider_invalid_response'});return true;}
+      last=null;
       send(res,200,{...data,latencyMs:now()-started,source:'typesafe-api'});
     }catch(error){
       const input=['invalid_state','body_too_large'].includes(error.message)||error instanceof SyntaxError;
