@@ -1,3 +1,4 @@
+import { exportArchive } from './jev-folder.js';
 import { TikTokGameClient } from '../tiktok-game-client.js';
 import { JevPilot } from './jev-client.js';
 import { JevMemory } from './jev-memory.js';
@@ -17,7 +18,14 @@ const pilot = new JevPilot(game, info => {
 });
 $('jev-form').addEventListener('submit',event=>{event.preventDefault();pilot.start($('jev-token').value.trim());$('jev-token').value='';void memory.flush();});
 $('jev-stop').addEventListener('click',()=>pilot.stop());
+$('pilot-select').value=pilot.mode;
+$('pilot-select').addEventListener('change',e=>pilot.setMode(e.target.value));
 pilot.init();
+$('download-archive').onclick=async()=>{
+ try{const data=await exportArchive();const url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'}));
+ const a=document.createElement('a');a.href=url;a.download='jev-partidas-deste-navegador.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+ }catch{$('memory-save-status').textContent='Não foi possível exportar o arquivo local.';}
+};
 const params = new URLSearchParams(location.search);
 const training=params.get('training')==='1';
 let trainingSpeed=1;

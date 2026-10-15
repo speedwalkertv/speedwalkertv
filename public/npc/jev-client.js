@@ -18,8 +18,16 @@ const errorMessage={
 
 export class JevPilot {
   constructor(game,onStatus){
+    this.mode=localStorage.getItem('jev-pilot-mode')||'jev';
     this.training=new URLSearchParams(location.search).get('training')==='1';
     this.game=game;this.onStatus=onStatus;this.enabled=false;this.generation=0;
+  }
+  setMode(mode){
+    if(!['jev','local'].includes(mode))return;
+    this.stop(false);this.mode=mode;localStorage.setItem('jev-pilot-mode',mode);
+    const token=sessionStorage.getItem('jev-control');
+    if(mode==='jev'&&token)this.start(token);
+    else this.onStatus({state:'ready',text:mode==='local'?'Piloto local ativo. Memória continua sendo registrada.':'Informe o código para conectar a Jev.'});
   }
   async init(){
     clearTimeout(this.refreshTimer);
@@ -29,7 +37,7 @@ export class JevPilot {
       this.config=await response.json();
       this.onStatus({state:this.config.ready?'ready':'unconfigured',text:this.config.ready?'Jev pronta. Informe o código JEV_CONTROL_TOKEN para conectar.':configMessage[this.config.configuration]||'Conexão da Jev ainda não configurada no servidor.'});
       const token=sessionStorage.getItem('jev-control');
-      if(this.config.memoryReady&&token)this.start(token);
+      if(this.config.memoryReady&&token&&this.mode==='jev')this.start(token);
     }catch{this.onStatus({state:'error',text:'Não foi possível consultar a conexão da Jev.'});}
     if(!this.enabled&&!this.config?.ready)this.refreshTimer=setTimeout(()=>this.init(),10000);
   }
@@ -39,7 +47,8 @@ export class JevPilot {
     this.stop(false);this.token=token;this.enabled=true;
     sessionStorage.setItem('jev-control',token);
     this.onStatus({state:'thinking',text:this.config.ready?'Conectando à Jev pela TypeSafe...':'Memoria ativa. Piloto local em funcionamento.'});
-    this.loop(this.generation);
+    if(this.mode==='jev')this.loop(this.generation);
+    else this.onStatus({state:'ready',text:'Piloto local ativo; memória conectada.'});
   }
   stop(clear=true){
     this.enabled=false;this.generation++;clearTimeout(this.timer);this.abort?.abort();

@@ -5,8 +5,10 @@ let writing=Promise.resolve();
 
 function openDatabase(){
   return new Promise((resolve,reject)=>{
-    const req=indexedDB.open(DB,1);
-    req.onupgradeneeded=()=>req.result.createObjectStore('selected');
+    const req=indexedDB.open(DB,2);
+    req.onupgradeneeded=()=>{
+      for(const name of ['selected','episodes'])if(!req.result.objectStoreNames.contains(name))req.result.createObjectStore(name);
+    };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
   });
@@ -103,4 +105,20 @@ export async function syncFolderExport(exported){
   for(const match of exported.matches||[])await writeMatchToFolder(match);
   await writeBrainToFolder(exported);
   return (exported.matches||[]).length;
+}
+
+export async function archiveEpisode(match){
+  const db=await openDatabase();
+  try{await new Promise((resolve,reject)=>{
+    const tx=db.transaction('episodes','readwrite');
+    tx.objectStore('episodes').put(match,match.id);
+    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+  });}finally{db.close();}
+}
+export async function exportArchive(){
+  const db=await openDatabase();
+  try{return await new Promise((resolve,reject)=>{
+    const tx=db.transaction('episodes','readonly');const r=tx.objectStore('episodes').getAll();
+    r.onsuccess=()=>resolve({version:1,matches:r.result,notes:''});r.onerror=()=>reject(r.error);
+  });}finally{db.close();}
 }

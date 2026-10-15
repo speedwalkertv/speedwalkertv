@@ -74,6 +74,20 @@ try {
   await jevPage.waitForFunction(()=>window.NPC_CHAOS?.game.agentDecision?.movement==='retreat');
   assert.equal(await jevPage.locator('#jev-mode').innerText(),'API ATIVA');
   assert.ok(decisions>0,'Jev should issue decisions');
+  const runBefore=await jevPage.evaluate(()=>window.NPC_CHAOS.game.runs);
+  await jevPage.locator('#pilot-select').selectOption('local');
+  await jevPage.waitForTimeout(100);
+  assert.equal(await jevPage.evaluate(()=>window.NPC_CHAOS.game.runs),runBefore);
+  assert.notEqual(await jevPage.evaluate(()=>window.NPC_CHAOS.game.agentDecision?.source),'typesafe-api');
+  await jevPage.locator('#pilot-select').selectOption('jev');
+  await jevPage.waitForFunction(()=>window.NPC_CHAOS.game.agentDecision?.source==='typesafe-api');
+  const archived=await jevPage.evaluate(async()=>{
+    const {archiveEpisode,exportArchive}=await import('/npc/jev-folder.js');
+    await archiveEpisode({id:'archive-test-0001',frames:[]});
+    await archiveEpisode({id:'archive-test-0001',frames:[]});
+    return (await exportArchive()).matches.length;
+  });
+  assert.equal(archived,1);
   await jevPage.close();
   const memoryPage=await browser.newPage({viewport:{width:1480,height:1000}});
   memoryPage.on('pageerror',error=>pageErrors.push('memory: '+String(error)));

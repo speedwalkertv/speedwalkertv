@@ -81,7 +81,10 @@
   <aside class="side right">
     <section class="glass block jev-panel"><div class="section-label">JEV · TYPESAFE <span id="jev-mode">PILOTO LOCAL</span></div>
     <p id="jev-status" role="status">Consultando conexão...</p><small id="jev-detail"></small>
-    <form id="jev-form"><label for="jev-token">Código privado de controle</label><input id="jev-token" type="password" autocomplete="off" minlength="24" placeholder="Código de controle, não a chave API"><button class="button accent" id="jev-connect" type="submit" disabled>Conectar Jev</button><button class="button ghost" id="jev-stop" type="button">Desconectar</button></form>
+    <label for="pilot-select">Quem controla o personagem</label>
+<select id="pilot-select"><option value="jev">Jev — TypeSafe</option><option value="local">Piloto local — regras e experiências</option><option disabled>Modelo local — integração pendente</option></select>
+<p id="memory-save-status" role="status">Memória: aguardando partida.</p>
+<button id="download-archive" class="button ghost">Baixar partidas deste navegador</button><form id="jev-form"><label for="jev-token">Código privado de controle</label><input id="jev-token" type="password" autocomplete="off" minlength="24" placeholder="Código de controle, não a chave API"><button class="button accent" id="jev-connect" type="submit" disabled>Conectar Jev</button><button class="button ghost" id="jev-stop" type="button">Desconectar</button></form>
     <small>A chave TypeSafe fica somente no servidor. A Jev decide; o motor executa o combate.</small>
     <a class="button accent" href="/npc/?training=1">Treinamento acelerado ↗</a><a href="/npc/memory/" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Abrir cérebro da Jev ↗</a></section>
     <div class="glass block event-panel"><div class="section-label"><span class="small-red"></span> ATIVIDADE EM TEMPO REAL <span class="counter" id="event-total">0</span></div><div id="activity-list" class="activity-list"><div class="empty">Aguardando interações da live...</div></div></div>

@@ -1,5 +1,5 @@
 // Memoria de episodios: cada derrota fecha uma partida, mesmo sem API TypeSafe.
-import { writeMatchToFolder, writeBrainToFolder } from './jev-folder.js';
+import { writeMatchToFolder, writeBrainToFolder, archiveEpisode } from './jev-folder.js';
 const KEY='jev-match-queue-v1';
 const OPTIONS=['approach','retreat','orbit_left','orbit_right','north','south','east','west'];
 const limit=(n,min,max)=>Math.min(max,Math.max(min,n));
@@ -114,6 +114,11 @@ export class JevMemory {
     this.frames=[];this.lastFrame=-1;this.localAt=-1;
     if(match.frames.length<2)return;
     this.queue.push(match);this.persistQueue();
+    void archiveEpisode(match).then(()=>{
+      const el=document.getElementById('memory-save-status');if(el)el.textContent='Partida arquivada neste navegador. Pendentes no servidor: '+this.queue.length;
+    }).catch(()=>{
+      const el=document.getElementById('memory-save-status');if(el)el.textContent='Falha no arquivo local. Exporte a memória antes de fechar.';
+    });
     void writeMatchToFolder({...match,date:new Date().toISOString()}).catch(()=>{});
     void this.flush();
   }
@@ -130,6 +135,7 @@ export class JevMemory {
         if(!response.ok)break;
         updated=true;
         this.queue.shift();this.persistQueue();
+        const el=document.getElementById('memory-save-status');if(el)el.textContent='Servidor confirmou a gravação. Pendentes: '+this.queue.length;
       }
       await this.refreshPolicy();
       if(updated&&this.policy){
