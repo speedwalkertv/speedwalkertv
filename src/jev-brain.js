@@ -123,7 +123,7 @@ export function policyFrom(state) {
       contexts[context] = { movement: ranked[0].movement, samples: ranked[0].samples, meanReward: fmt(ranked[0].mean) };
     }
   }
-  return { version: 1, matches: state.matches, bestScore: state.bestScore, bestWave: state.bestWave, contexts, mistakes:state.mistakes };
+  return { version: 1, matches: state.matches, bestScore: state.bestScore, bestWave: state.bestWave, targetWave:Math.max(8,state.bestWave+1), contexts, mistakes:state.mistakes };
 }
 
 const oneLine = (s) => String(s).replaceAll('\n',' ').slice(0, 200);

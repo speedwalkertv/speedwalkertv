@@ -14,7 +14,7 @@ test('Jev protege credenciais, consulta provedor e aplica limites',async()=>{
  assert.equal(status.configuration,'ok');
  assert.equal((await fetch(url+'/api/jev/decision',{method:'POST'})).status,401);assert.equal(calls,0);
  const options={method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({hero:{x:300,y:700,hp:100,maxHp:160},enemies:[],chat:'untrusted text'})};
- const result=await (await fetch(url+'/api/jev/decision',options)).json();assert.equal(result.movement,'retreat');assert.equal(result.source,'typesafe-api');assert.equal(sent.state.chat,undefined);
+ const result=await (await fetch(url+'/api/jev/decision',options)).json();assert.equal(result.movement,'retreat');assert.equal(result.source,'typesafe-api');assert.equal(sent.state.chat,undefined);assert.equal(sent.state.objective.targetWave,8);assert.equal(sent.state.objective.priorities[0],'survive');
  assert.equal((await fetch(url+'/api/jev/decision',options)).status,429);
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
