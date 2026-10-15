@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#080b17">
+  <title>NPC CHAOS LIVE — O Herói do Chat</title>
+  <link rel="stylesheet" href="/npc/style.css">
+</head>
+<body>
+ <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+ <div class="app">
+  <aside class="side">
+    <div class="side-top">
+      <div class="logo-mark"><span class="logo-diamond">✦</span><span>NPC<span class="txt-accent">CHAOS</span><small>ECLIPSE ARENA · LIVE EXPERIENCE</small></span></div>
+      <div class="live-badge"><span class="live-dot"></span><span id="live-state">CONECTANDO</span></div>
+    </div>
+    <div class="intro">
+      <div class="overline"><span class="hairline"></span> TEMPORADA 01 <span class="hairline"></span></div>
+      <h1>O herói<br>é do <em>chat.</em></h1>
+      <p>Ele luta sozinho. Você decide o que acontece.</p>
+    </div>
+    <div class="glass block instructions">
+      <div class="section-label"><span class="section-icon">⌘</span> COMANDOS DO CHAT <span class="tiny-pill">GRÁTIS</span></div>
+      <div class="command-row"><span class="cmd-emoji fire">✦</span><div><strong>!fogo</strong><small>Explosão flamejante</small></div><span class="cmd-key">01</span></div>
+      <div class="command-row"><span class="cmd-emoji ice">❄</span><div><strong>!gelo</strong><small>Congela inimigos</small></div><span class="cmd-key">02</span></div>
+      <div class="command-row"><span class="cmd-emoji heal">✚</span><div><strong>!cura</strong><small>Recupera o herói</small></div><span class="cmd-key">03</span></div>
+      <div class="command-row"><span class="cmd-emoji shield">◇</span><div><strong>!escudo</strong><small>Proteção extra</small></div><span class="cmd-key">04</span></div>
+      <div class="command-row"><span class="cmd-emoji boss">♛</span><div><strong>!boss</strong><small>Invoca o chefão</small></div><span class="cmd-key">05</span></div>
+    </div>
+    <div class="glass block boosts">
+      <div class="section-label"><span class="section-icon">✧</span> PRESENTES = PODERES</div>
+      <div class="gift-row"><div class="gift-symbol rose">✿</div><div class="gift-text"><strong>Rosa</strong><small>Cura celestial</small></div><div class="gift-tag">SUPORTE</div></div>
+      <div class="gift-row"><div class="gift-symbol donut">◉</div><div class="gift-text"><strong>Presente médio</strong><small>Modo Berserk</small></div><div class="gift-tag">BUFF</div></div>
+      <div class="gift-row"><div class="gift-symbol meteor">☄</div><div class="gift-text"><strong>Presente épico</strong><small>Chuva de meteoros</small></div><div class="gift-tag">ATAQUE</div></div>
+      <div class="gift-row"><div class="gift-symbol galaxy">✹</div><div class="gift-text"><strong>Presente lendário</strong><small>Poder divino</small></div><div class="gift-tag">ULTIMATE</div></div>
+      <div class="gift-foot">Curtidas carregam energia. Seguir invoca aliados.</div>
+    </div>
+    <div class="glass block leaderboard">
+      <div class="section-label">TOP APOIADORES <span class="leader-icon">♕</span></div>
+      <div id="support-list" class="support-list"><div class="empty">Seu nome pode aparecer aqui.</div></div>
+    </div>
+    <div class="bottom-note">DESENVOLVIDO PARA LIVES INTERATIVAS · V1.0</div>
+  </aside>
+  <section class="main">
+    <div class="stage-shell">
+      <div class="stage" id="stage">
+        <canvas id="world" width="720" height="1280" aria-label="Arena do NPC CHAOS LIVE"></canvas>
+        <div class="stage-layer">
+          <div class="stage-top">
+            <div class="stage-brand"><span class="mini-diamond">✦</span> NPC CHAOS <b>LIVE</b></div>
+            <div class="stage-live"><span class="live-dot"></span><span id="stage-status">DEMO</span></div>
+          </div>
+          <div class="hero-info">
+            <div class="hero-avatar"><img src="/npc/assets/kaito.webp" alt="Retrato de Kaito"></div>
+            <div class="hero-bars">
+              <div class="hero-title"><strong>KAITO <span>O IMPARÁVEL</span></strong><span id="hero-level">LVL 1</span></div>
+              <div class="hp-track"><div id="hp-fill"></div><strong id="hero-hp">160 / 160</strong></div>
+              <div class="shield-line"><div class="xp-track"><div id="xp-fill"></div></div><span id="shield-label">ESCUDO 0</span></div>
+            </div>
+          </div>
+          <div class="score-panel">
+            <div><span>ONDA</span><strong id="wave">01</strong></div>
+            <div><span>ABATES</span><strong id="kills">000</strong></div>
+            <div><span>PONTOS</span><strong id="score">0</strong></div>
+          </div>
+          <div class="battle-callout" id="battle-callout"><small>EVENTO ESPECIAL</small><strong id="callout-title">A ARENA ACORDOU</strong><span id="callout-caption">O HERÓI LUTA SOZINHO</span></div>
+          <div class="speech" id="speech"><div class="speech-user">KAITO <span>ESTÁ FALANDO</span></div><div id="speech-line">Pronto! Quem vai entrar na arena comigo?</div></div>
+          <div class="combo" id="combo" aria-hidden="true"><strong id="combo-value">2</strong><span>COMBO</span></div>
+          <div class="like-power"><div class="power-head"><span>⚡ ENERGIA DO CHAT</span><strong id="power-value">0 / 100</strong></div><div class="power-track"><div id="power-fill"></div></div></div>
+          <div class="feed-stage" id="stage-feed"><span class="mini-feed-title">ÚLTIMA INTERAÇÃO</span><span id="last-event">Aguardando o público...</span></div>
+          <div class="stage-bottom"><span>✦ ENTRE NA ARENA!</span><span>COMENTE <b>!FOGO</b> OU <b>!CURA</b></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="control-bar">
+      <div class="control-left"><span class="pulse-point"></span><div><strong id="control-mode">Modo demonstração</strong><small id="control-description">O NPC joga automaticamente mesmo sem live.</small></div></div>
+      <div class="control-actions"><button class="button ghost" id="effects-toggle" type="button" aria-pressed="false" title="Reduzir tremor e intensidade dos efeitos">Efeitos: completos</button><button class="button ghost" id="sound-toggle" type="button" title="Ativar falas do personagem">♫ Voz: desligada</button><button class="button accent" id="fullscreen" type="button">⛶ Tela cheia</button></div>
+    </div>
+  </section>
+  <aside class="side right">
+    <section class="glass block jev-panel"><div class="section-label">JEV · TYPESAFE <span id="jev-mode">PILOTO LOCAL</span></div>
+    <p id="jev-status" role="status">Consultando conexão...</p><small id="jev-detail"></small>
+    <label for="pilot-select">Quem controla o personagem</label>
+<select id="pilot-select"><option value="jev">Jev — TypeSafe</option><option value="local">Piloto local — regras e experiências</option><option disabled>Modelo local — integração pendente</option></select>
+<p id="memory-save-status" role="status">Memória: aguardando partida.</p>
+<button id="download-archive" class="button ghost">Baixar partidas deste navegador</button><form id="jev-form"><label for="jev-token">Código privado de controle</label><input id="jev-token" type="password" autocomplete="off" minlength="24" placeholder="Código de controle, não a chave API"><button class="button accent" id="jev-connect" type="submit" disabled>Conectar Jev</button><button class="button ghost" id="jev-stop" type="button">Desconectar</button></form>
+    <small>A chave TypeSafe fica somente no servidor. A Jev decide; o motor executa o combate.</small>
+    <a class="button accent" href="/npc/?training=1">Treinamento acelerado ↗</a><a href="/npc/memory/" style="display:block;text-align:center;text-decoration:none;margin-top:12px">Abrir cérebro da Jev ↗</a></section>
+    <div class="glass block event-panel"><div class="section-label"><span class="small-red"></span> ATIVIDADE EM TEMPO REAL <span class="counter" id="event-total">0</span></div><div id="activity-list" class="activity-list"><div class="empty">Aguardando interações da live...</div></div></div>
+    <div class="glass block demo-panel" id="demo-panel">
+      <div class="section-label">LABORATÓRIO <span class="tiny-pill demo-pill">MODO TESTE</span></div>
+      <p>Simule as interações enquanto prepara sua transmissão.</p>
+      <div class="demo-grid">
+        <button type="button" data-test="chat" data-text="!fogo"><span class="demo-icon fire">✦</span> Chamas</button>
+        <button type="button" data-test="chat" data-text="!cura"><span class="demo-icon heal">✚</span> Cura</button>
+        <button type="button" data-test="chat" data-text="!gelo"><span class="demo-icon ice">❄</span> Gelo</button>
+        <button type="button" data-test="chat" data-text="!escudo"><span class="demo-icon shield">◇</span> Escudo</button>
+        <button type="button" data-test="gift" data-gift="rose"><span class="demo-icon rose">✿</span> Rosa</button>
+        <button type="button" data-test="gift" data-gift="donut"><span class="demo-icon donut">◉</span> Berserk</button>
+        <button type="button" data-test="gift" data-gift="meteor"><span class="demo-icon meteor">☄</span> Meteoro</button>
+        <button type="button" data-test="gift" data-gift="galaxy"><span class="demo-icon galaxy">✹</span> Galáxia</button>
+        <button type="button" data-test="like"><span class="demo-icon ice">♥</span> Curtidas</button>
+        <button type="button" data-test="follow"><span class="demo-icon shield">♞</span> Seguidor</button>
+      </div>
+      <div class="hint">Eventos simulados são usados apenas no modo demonstração.</div>
+    </div>
+    <div class="glass block info-card">
+      <div class="section-label">COMO FUNCIONA</div>
+      <div class="step"><span>01</span><p>O herói luta sem controles manuais.</p></div>
+      <div class="step"><span>02</span><p>A audiência altera o combate em tempo real.</p></div>
+      <div class="step"><span>03</span><p>Uma nova partida começa automaticamente quando ele cai.</p></div>
+    </div>
+    <div class="bottom-note">OBS: use <b>/npc/?overlay=1</b> como fonte do navegador.</div>
+  </aside>
+ </div>
+ <script type="module" src="/npc/main.js"></script>
+</body>
+</html>

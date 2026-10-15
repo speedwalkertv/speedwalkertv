@@ -1,0 +1,20 @@
+{
+  "name": "tiktok-live-game-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bridge local reutilizavel: eventos TikTok LIVE para jogos web via WebSocket",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "tiktok-live-connector": "2.5.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.0"
+  }
+}
