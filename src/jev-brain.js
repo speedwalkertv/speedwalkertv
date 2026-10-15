@@ -59,6 +59,16 @@ function normalizeFrame(frame) {
   };
 }
 
+export function reviewDeath(frames){
+  const end=frames.at(-1);
+  const recent=frames.filter(f=>f.t>=end.t-6);
+  const prior=recent[0];
+  return {context:contextFor(prior),movement:prior.movement,
+    damage:Math.max(0,end.damageTaken-prior.damageTaken),
+    impacts:Math.max(0,end.hitsTaken-prior.hitsTaken),
+    warning:'Associacao observada antes da morte; nao prova causalidade.'};
+}
+
 export function normalizeMatch(raw) {
   if (!raw || !Array.isArray(raw.frames) || raw.frames.length < 2 || raw.frames.length > 2400) throw new Error('invalid_match');
   const frames = raw.frames.map(normalizeFrame);
@@ -73,14 +83,20 @@ export function normalizeMatch(raw) {
     shots: safeInt(raw.shots), shotsHit: safeInt(raw.shotsHit),
     damageTaken: fmt(finite(raw.damageTaken, 0, 1000000)),
     hitsTaken: safeInt(raw.hitsTaken), projectileHits: safeInt(raw.projectileHits),
+    deathReview: reviewDeath(frames),
     frames
   };
 }
 
-const newState = () => ({ version: 1, matches: 0, bestScore: 0, bestWave: 0, sumDamage: 0, sumDuration: 0, cells: {} });
+const newState = () => ({ version: 1, matches: 0, bestScore: 0, bestWave: 0, sumDamage: 0, sumDuration: 0, cells: {}, mistakes: {} });
 
 export function mergeExperience(state, match) {
   state.matches++;
+  const review=match.deathReview||reviewDeath(match.frames);
+  if(review.damage>0){
+    const key=review.context+':'+review.movement;
+    state.mistakes[key]=(state.mistakes[key]||0)+1;
+  }
   state.bestScore = Math.max(state.bestScore, match.score);
   state.bestWave = Math.max(state.bestWave, match.wave);
   state.sumDamage += match.damageTaken;
@@ -107,7 +123,7 @@ export function policyFrom(state) {
       contexts[context] = { movement: ranked[0].movement, samples: ranked[0].samples, meanReward: fmt(ranked[0].mean) };
     }
   }
-  return { version: 1, matches: state.matches, bestScore: state.bestScore, bestWave: state.bestWave, contexts };
+  return { version: 1, matches: state.matches, bestScore: state.bestScore, bestWave: state.bestWave, contexts, mistakes:state.mistakes };
 }
 
 const oneLine = (s) => String(s).replaceAll('\n',' ').slice(0, 200);
@@ -198,14 +214,8 @@ export function createBrain({env = process.env, root = defaultBrainPath(env)} = 
     if(new Set(matches.map(m=>m.id)).size!==matches.length)throw Error('invalid_import');
     const task=pending.then(async()=>{
       await initialize();
-      if(input.mode==='replace'){
-        const backup=path.join(root,'09 - Backups',new Date().toISOString().replaceAll(':','-')+'-'+randomUUID().slice(0,8));
-        await mkdir(backup,{recursive:true});
-        await rename(parts,path.join(backup,'04 - Partidas'));
-        await mkdir(parts,{recursive:true});
-        await writeFile(path.join(backup,'Memoria editavel.md'),notes);
-        state=newState();
-      }
+      if(input.mode==='replace')throw Error('invalid_import');
+
       let added=0;
       for(const match of matches){
         const file=path.join(parts,match.id+'.json');

@@ -1,5 +1,5 @@
 // Simulacao independente do navegador: combate, NPC automatico e efeitos das LIVE.
-import { intercept, selectTarget, segmentCircleHit } from './combat-ai.js';
+import { intercept, selectTarget, segmentCircleHit, defensiveMove } from './combat-ai.js';
 export const WIDTH = 720;
 export const HEIGHT = 1280;
 const LIMITS = { left: 67, right: 653, top: 405, bottom: 1150 };
@@ -360,6 +360,13 @@ export class Arena {
         h.dashClock = 3.8;
         this.pulse(h.x, h.y, '#8bf2f9', 100, 25);
         if(!agent){vx = -dx; vy = -dy;}
+      }
+      const defense=defensiveMove(h,this.enemies,this.bullets,{x:vx,y:vy},
+        {left:LIMITS.left+22,right:LIMITS.right-22,top:LIMITS.top+22,bottom:LIMITS.bottom-22});
+      if(defense.override){
+        vx=defense.x;vy=defense.y;
+        this.lastMovement=Math.abs(vx)>Math.abs(vy)?(vx>0?'east':'west'):(vy>0?'south':'north');
+        this.lastMovementSource='baseline';
       }
       const speed = h.speed * (h.dashClock > 3.45 ? 2.7 : 1);
       const beforeX = h.x, beforeY = h.y;

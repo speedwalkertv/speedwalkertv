@@ -43,3 +43,38 @@ export function segmentCircleHit(x0,y0,x1,y1,cx,cy,radius){
   const t=(-b-Math.sqrt(disc))/(2*a);
   return t>=0&&t<=1?t:null;
 }
+
+// Evaluate visible trajectories over a short horizon; no knowledge of future spawns.
+export function defensiveMove(hero, enemies, bullets, proposed, bounds) {
+  const candidates=[proposed,{x:0,y:0},...Array.from({length:8},(_,i)=>({x:Math.cos(i*Math.PI/4),y:Math.sin(i*Math.PI/4)}))];
+  const threats=bullets.filter(b=>!b.friendly&&Math.hypot(b.x-hero.x,b.y-hero.y)<600);
+  const nearby=enemies.filter(e=>e.hp>0&&Math.hypot(e.x-hero.x,e.y-hero.y)<300);
+  const speed=hero.speed*(hero.dashClock>3.45?2.7:1);
+  function risk(v){
+    let cost=0;
+    for(let step=1;step<=8;step++){
+      const t=step*.075;
+      const rawX=hero.x+v.x*speed*t,rawY=hero.y+v.y*speed*t;
+      const x=Math.max(bounds.left,Math.min(bounds.right,rawX));
+      const y=Math.max(bounds.top,Math.min(bounds.bottom,rawY));
+      cost+=(Math.abs(x-rawX)+Math.abs(y-rawY))*.01;
+      for(const b of threats){
+        const d=Math.hypot(x-b.x-b.vx*t,y-b.y-b.vy*t);
+        const margin=22+(b.r||6);
+        cost+=Math.max(0,margin+35-d)**2/(step*12);
+      }
+      for(const e of nearby){
+        const d=Math.hypot(x-e.x-(e.vx||0)*t,y-e.y-(e.vy||0)*t);
+        cost+=Math.max(0,(e.r||20)+45-d)**2/(step*18);
+      }
+    }
+    return cost;
+  }
+  const initial=risk(proposed);
+  let best=proposed,bestCost=initial;
+  for(const v of candidates){
+    const cost=risk(v)+Math.hypot(v.x-proposed.x,v.y-proposed.y)*.7;
+    if(cost<bestCost){best=v;bestCost=cost;}
+  }
+  return { ...best, override:initial>3&&bestCost+2<initial, risk:initial };
+}

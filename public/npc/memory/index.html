@@ -51,7 +51,7 @@
        <div class="button-row"><button class="btn secondary" id="export-brain" disabled>Baixar memória .json</button><button class="btn secondary" id="export-dataset" disabled>Dataset para treino .jsonl</button></div>
        <label class="field-label" for="import-file">ARQUIVO JSON EXPORTADO</label>
        <input id="import-file" class="file-field" type="file" accept=".json,application/json" disabled>
-       <label class="checkbox"><input id="replace-memory" type="checkbox" disabled> Substituir a memória do servidor (um backup será guardado)</label>
+       <label class="checkbox"><input id="replace-memory" type="checkbox" disabled hidden> Histórico protegido: importações apenas acrescentam experiências.</label>
        <button class="btn primary" id="import-brain" disabled>Importar experiências <span>→</span></button>
        <p class="footnote">Sem a opção de substituição, partidas novas são mescladas às existentes pelo ID. Arquivos locais anteriores não são apagados automaticamente.</p>
       </section>

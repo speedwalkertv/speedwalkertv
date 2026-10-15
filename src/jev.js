@@ -16,7 +16,7 @@ export function observation(raw){
 }
 export function requestFor(state,model,policy,notes=''){
   return {model,state,...(policy?.matches ? {memory:{matches:policy.matches,bestWave:policy.bestWave,
-    survivalRules:policy.contexts,notes:notes.slice(0,4000)}} : notes ? {memory:{notes:notes.slice(0,4000)}} : {}),questions:{
+    survivalRules:policy.contexts,repeatedDeathContexts:policy.mistakes,notes:notes.slice(0,4000)}} : notes ? {memory:{notes:notes.slice(0,4000)}} : {}),questions:{
     target:{type:'choice',instructions:'Choose the enemy to shoot now. Prioritize imminent threats and easy eliminations; keep a safe distance. IDs refer to enemies in state.',criteria:Object.fromEntries([['nearest','Nearest living threat, if there is one'],['none','No living enemy currently available'],...state.enemies.map(e=>[e.id,`${e.type} at (${e.x},${e.y}), HP ${e.hp}`])])},
     movement:{type:'choice',instructions:'Choose one movement for the next two seconds. Survive, avoid incoming projectiles and enemy contact, remain inside arena bounds. Approach only when enemies are too far; retreat when surrounded or low on health. Orbit choices move around the selected target.',criteria:{approach:'Move toward the target',retreat:'Move away from the target',orbit_left:'Circle counterclockwise around the target',orbit_right:'Circle clockwise around the target',hold:'Stay in place',north:'Move up',south:'Move down',east:'Move right',west:'Move left'}},
     fire:{type:'noul',instructions:'Firing at the selected enemy now is useful. Shots cost no ammunition.'},

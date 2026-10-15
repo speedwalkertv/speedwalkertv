@@ -48,11 +48,11 @@ export class JevMemory {
   loadQueue(){
     try{
       const parsed=JSON.parse(localStorage.getItem(KEY)||'[]');
-      return Array.isArray(parsed)?parsed.slice(-16):[];
+      return Array.isArray(parsed)?parsed:[];
     }catch{return [];}
   }
   persistQueue(){
-    try{localStorage.setItem(KEY,JSON.stringify(this.queue.slice(-16)));}
+    try{localStorage.setItem(KEY,JSON.stringify(this.queue));}
     catch{ /* Sem espaco no navegador: mantem os registros desta sessao na memoria. */ }
   }
   async refreshPolicy(){
@@ -88,6 +88,7 @@ export class JevMemory {
         }else{
           const f=frameOf(g),rule=this.policy?.contexts?.[this.context(f)];
           if(rule?.samples>=12&&OPTIONS.includes(rule.movement)
+            && (this.policy?.mistakes?.[this.context(f)+':'+rule.movement]||0)<3
             && !(f.projectiles>0&&rule.movement==='approach')
             && !(f.hpRatio<.35&&rule.movement==='approach'))move=rule.movement;
         }
@@ -106,7 +107,7 @@ export class JevMemory {
     if(this.frames.length&&this.frames[this.frames.length-1].t!==g.t)this.frames.push(frameOf(g));
     const s=g.combatStats;
     const match={
-      id:crypto.randomUUID(),outcome:'dead',duration:g.t,wave:g.wave,kills:g.kills,score:g.score,
+      id:crypto.randomUUID(),date:new Date().toISOString(),outcome:'dead',duration:g.t,wave:g.wave,kills:g.kills,score:g.score,
       shots:s.shots,shotsHit:s.hits,damageTaken:s.damageTaken,hitsTaken:s.hitsTaken,
       projectileHits:s.projectileHits,frames:this.frames.slice(0,2400)
     };

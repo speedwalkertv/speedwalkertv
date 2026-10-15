@@ -36,12 +36,9 @@ test('Jev aprende, grava no cofre, recupera, importa e preserva backup', async (
     const backup={matches:[match('test-match-0002','orbit_left')],notes:'Nova estrategia',mode:'merge'};
     assert.equal((await brain.importMemory(backup)).added,1);
     assert.equal((await brain.getDashboard()).recent.length,2);
-    assert.equal((await brain.importMemory({...backup,mode:'replace'})).added,1);
-    assert.equal((await brain.getPolicy()).matches,1);
-    assert.equal(await brain.getNotes(),'Nova estrategia');
-    assert.equal((await createBrain({root}).getRecent()).length,1);
-    const files=await import('node:fs/promises').then(fs=>fs.readdir(path.join(root,'09 - Backups')));
-    assert.equal(files.length,1);
+    await assert.rejects(brain.importMemory({...backup,mode:'replace'}),/invalid_import/);
+    assert.equal((await brain.getPolicy()).matches,2);
+    assert.equal((await createBrain({root}).getRecent()).length,2);
     assert.equal((await readFile(path.join(root,'08 - Modelos','politica-jev.json'),'utf8')).includes('orbit_left'),true);
   } finally { await rm(root,{recursive:true,force:true}); }
 });

@@ -13,7 +13,7 @@ function notice(message,type=''){
 }
 function enable(value){
   connected=value;
-  for(const id of ['notes','save-notes','refresh','export-brain','export-dataset','import-file','import-brain','replace-memory'])
+  for(const id of ['notes','save-notes','refresh','export-brain','export-dataset','import-file','import-brain'])
     $(id).disabled=!value;
   $('connection').textContent=value?'Memória conectada':'Aguardando autorização';
   document.querySelector('.status-dot').style.background=value?'#73ffe0':'#ffb26c';

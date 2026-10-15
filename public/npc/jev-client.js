@@ -18,6 +18,7 @@ const errorMessage={
 
 export class JevPilot {
   constructor(game,onStatus){
+    this.training=new URLSearchParams(location.search).get('training')==='1';
     this.game=game;this.onStatus=onStatus;this.enabled=false;this.generation=0;
   }
   async init(){
@@ -47,9 +48,9 @@ export class JevPilot {
   }
   async loop(generation){
     if(!this.enabled||generation!==this.generation)return;
-    if(!this.config?.ready||document.hidden||this.game.phase!=='combat'){
+    if(this.training||!this.config?.ready||document.hidden||this.game.phase!=='combat'){
       if(this.game.agentDecision?.source==='typesafe-api')this.game.agentDecision=null;
-      this.onStatus({state:'waiting',text:!this.config?.ready?'Memoria ativa; IA externa indisponivel.':'Jev aguardando combate ativo.'});
+      this.onStatus({state:'waiting',text:this.training?'Treino local: memoria conectada, sem consultas aceleradas à API.':!this.config?.ready?'Memoria ativa; IA externa indisponivel.':'Jev aguardando combate ativo.'});
       this.timer=setTimeout(()=>this.loop(generation),2000);return;
     }
     const run=this.game.runs,g=this.game,h=g.hero;

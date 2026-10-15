@@ -19,6 +19,17 @@ $('jev-form').addEventListener('submit',event=>{event.preventDefault();pilot.sta
 $('jev-stop').addEventListener('click',()=>pilot.stop());
 pilot.init();
 const params = new URLSearchParams(location.search);
+const training=params.get('training')==='1';
+let trainingSpeed=1;
+if(training){
+  const panel=document.createElement('div');
+  panel.style.cssText='position:fixed;top:8px;left:8px;z-index:999;background:#111c30;color:white;padding:12px;border:1px solid #5df5d8;border-radius:12px';
+  panel.innerHTML='<b>Treinamento local</b> <select aria-label="Velocidade de treino"><option value="1">1×</option><option value="4">4×</option><option value="8">8×</option></select> <button>Pausar</button> <a href="/npc/">Voltar à LIVE</a><div>Sem presentes da LIVE. Conecte a memória para salvar no servidor.</div>';
+  document.body.append(panel);
+  panel.querySelector('select').onchange=e=>trainingSpeed=Number(e.target.value);
+  panel.querySelector('button').onclick=e=>{trainingSpeed=trainingSpeed?0:Number(panel.querySelector('select').value);e.target.textContent=trainingSpeed?'Pausar':'Continuar';};
+}
+
 if (params.get('overlay') === '1') document.body.classList.add('overlay');
 
 let status = { mode: 'demo', state: 'connecting', username: '' };
@@ -51,7 +62,7 @@ $('effects-toggle').addEventListener('click',()=>{
 updateEffectsButton();
 
 function voiceSay(text) {
-  if (!voiceEnabled || !text) return;
+  if (training || !voiceEnabled || !text) return;
   if (text === lastVoiceText && game.t - lastVoiceTime < 3) return;
   lastVoiceText = text;
   lastVoiceTime = game.t;
@@ -200,7 +211,7 @@ function onStatus(next) {
 }
 
 function onEvent(event) {
-  if (!event || !event.type) return;
+  if (training || !event || !event.type) return;
   totalEvents++;
   $('event-total').textContent = String(totalEvents);
   game.interact(event);
@@ -208,7 +219,7 @@ function onEvent(event) {
 }
 
 const bridge = new TikTokGameClient({ onStatus, onEvent });
-bridge.connect();
+if(!training)bridge.connect();
 
 for (const button of document.querySelectorAll('[data-test]')) {
   button.addEventListener('click', () => bridge.sendDemo(button.dataset.test, {
@@ -220,8 +231,9 @@ let prev = performance.now();
 function frame(now) {
   const dt = Math.min((now - prev) / 1000, .05);
   prev = now;
-  game.update(dt);
-  memory.tick();
+  const steps=training?trainingSpeed:1;
+  for(let step=0;step<steps;step++){game.update(dt);memory.tick();}
+
   const renderStart=performance.now();
   draw(ctx, game, {reduced:reducedEffects});
   const renderMs=performance.now()-renderStart;

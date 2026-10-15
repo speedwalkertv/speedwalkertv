@@ -98,6 +98,14 @@ try {
   await memoryPage.locator('#refresh').click();
   await memoryPage.waitForFunction(()=>document.querySelector('#metric-matches')?.textContent==='1');
   assert.match(await memoryPage.locator('#match-list').innerText(),/5 pontos/);
+  await memoryPage.goto('http://127.0.0.1:'+port+'/npc/?training=1');
+  await memoryPage.getByLabel('Velocidade de treino').selectOption('8');
+  await memoryPage.waitForTimeout(1000);
+  assert.ok(await memoryPage.evaluate(()=>window.NPC_CHAOS.game.t>2));
+  await memoryPage.getByRole('button',{name:'Pausar',exact:true}).click();
+  const paused=await memoryPage.evaluate(()=>window.NPC_CHAOS.game.t);
+  await memoryPage.waitForTimeout(200);
+  assert.equal(await memoryPage.evaluate(()=>window.NPC_CHAOS.game.t),paused);
   await memoryPage.close();
   await mkdir(screenshotDir,{recursive:true});
   const deskPath=path.join(screenshotDir,'npc-chaos-desktop.png');
